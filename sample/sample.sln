@@ -1,0 +1,23 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sample", "sample.vcxproj", "{A719E61F-37B1-4F27-BA52-7E13602F0D17}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FlyRedis", "..\build\win\FlyRedis.vcxproj", "{51B2CDB7-530C-4CAA-AC9D-4E9A074DF869}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A719E61F-37B1-4F27-BA52-7E13602F0D17}.Debug|x64.ActiveCfg = Debug|x64
+		{A719E61F-37B1-4F27-BA52-7E13602F0D17}.Debug|x64.Build.0 = Debug|x64
+		{51B2CDB7-530C-4CAA-AC9D-4E9A074DF869}.Debug|x64.ActiveCfg = Debug|x64
+		{51B2CDB7-530C-4CAA-AC9D-4E9A074DF869}.Debug|x64.Build.0 = Debug|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
