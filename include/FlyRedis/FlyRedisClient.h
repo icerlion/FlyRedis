@@ -66,11 +66,11 @@ public:
     bool HMGET(const std::string& strKey, const std::vector<std::string>& vField, std::vector<std::string>& vOutput);
     bool HINCRBY(const std::string& strKey, const std::string& strField, int nIncVal, int& nResult);
 
-    bool ZADD(const std::string& strKey, int nScore, const std::string& strMember, int& nResult);
+    bool ZADD(const std::string& strKey, double fScore, const std::string& strMember, int& nResult);
     bool ZCARD(const std::string& strKey, int& nResult);
-    bool ZREVRANGE_WITHSCORES(const std::string& strKey, int nStart, int nStop, std::vector<std::pair<std::string, int> >& vResult);
-    bool ZREMRANGEBYSCORE(const std::string& strKey, int nFromScore, int nToScore, int& nResult);
-    bool ZSCORE(const std::string& strKey, const std::string& strMember, int& nResult);
+    bool ZREVRANGE_WITHSCORES(const std::string& strKey, double fStart, double fStop, std::vector<std::pair<std::string, double> >& vResult);
+    bool ZREMRANGEBYSCORE(const std::string& strKey, double fFromScore, double fToScore, int& nResult);
+    bool ZSCORE(const std::string& strKey, const std::string& strMember, double& fResult);
     bool ZREM(const std::string& strKey, const std::string& strMember, int& nResult);
 
     bool LPUSH(const std::string& strKey, const std::string& strValue, int& nResult);
@@ -98,6 +98,7 @@ private:
 
     bool PrepareRunRedisCmd(const std::string& strKey);
     bool RunRedisCmdOnOneLineResponseInt(int& nResult, const char* pszCaller);
+    bool RunRedisCmdOnOneLineResponseDouble(double& fResult, const char* pszCaller);
     bool RunRedisCmdOnOneLineResponseString(std::string& strResult, const char* pszCaller);
 
     void ClearRedisCmdCache();

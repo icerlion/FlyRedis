@@ -378,7 +378,7 @@ bool CFlyRedisClient::HINCRBY(const std::string& strKey, const std::string& strF
     return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
 }
 
-bool CFlyRedisClient::ZADD(const std::string& strKey, int nScore, const std::string& strMember, int& nResult)
+bool CFlyRedisClient::ZADD(const std::string& strKey, double fScore, const std::string& strMember, int& nResult)
 {
     if (!PrepareRunRedisCmd(strKey))
     {
@@ -386,7 +386,7 @@ bool CFlyRedisClient::ZADD(const std::string& strKey, int nScore, const std::str
     }
     m_vRedisCmdParamList.push_back("ZADD");
     m_vRedisCmdParamList.push_back(strKey);
-    m_vRedisCmdParamList.push_back(std::to_string(nScore));
+    m_vRedisCmdParamList.push_back(std::to_string(fScore));
     m_vRedisCmdParamList.push_back(strMember);
     return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
 }
@@ -402,7 +402,7 @@ bool CFlyRedisClient::ZCARD(const std::string& strKey, int& nResult)
     return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
 }
 
-bool CFlyRedisClient::ZREVRANGE_WITHSCORES(const std::string& strKey, int nStart, int nStop, std::vector<std::pair<std::string, int> >& vResult)
+bool CFlyRedisClient::ZREVRANGE_WITHSCORES(const std::string& strKey, double fStart, double fStop, std::vector<std::pair<std::string, double> >& vResult)
 {
     if (!PrepareRunRedisCmd(strKey))
     {
@@ -410,8 +410,8 @@ bool CFlyRedisClient::ZREVRANGE_WITHSCORES(const std::string& strKey, int nStart
     }
     m_vRedisCmdParamList.push_back("ZREVRANGE");
     m_vRedisCmdParamList.push_back(strKey);
-    m_vRedisCmdParamList.push_back(std::to_string(nStart));
-    m_vRedisCmdParamList.push_back(std::to_string(nStop));
+    m_vRedisCmdParamList.push_back(std::to_string(fStart));
+    m_vRedisCmdParamList.push_back(std::to_string(fStop));
     m_vRedisCmdParamList.push_back("WITHSCORES");
     if (nullptr == m_pCurRedisSession)
     {
@@ -437,13 +437,13 @@ bool CFlyRedisClient::ZREVRANGE_WITHSCORES(const std::string& strKey, int nStart
     for (; nKeyIndex < nLineCount && nValueIndex < nLineCount; nKeyIndex += 2, nValueIndex += 2)
     {
         const std::string& strMember = m_vRedisResponseLine[nKeyIndex];
-        int nScore = atoi(m_vRedisResponseLine[nValueIndex].c_str());
-        vResult.push_back(std::make_pair(strMember, nScore));
+        double fScore = atof(m_vRedisResponseLine[nValueIndex].c_str());
+        vResult.push_back(std::make_pair(strMember, fScore));
     }
     return true;
 }
 
-bool CFlyRedisClient::ZREMRANGEBYSCORE(const std::string& strKey, int nFromScore, int nToScore, int& nResult)
+bool CFlyRedisClient::ZREMRANGEBYSCORE(const std::string& strKey, double fFromScore, double fToScore, int& nResult)
 {
     if (!PrepareRunRedisCmd(strKey))
     {
@@ -451,12 +451,12 @@ bool CFlyRedisClient::ZREMRANGEBYSCORE(const std::string& strKey, int nFromScore
     }
     m_vRedisCmdParamList.push_back("ZREMRANGEBYSCORE");
     m_vRedisCmdParamList.push_back(strKey);
-    m_vRedisCmdParamList.push_back(std::to_string(nFromScore));
-    m_vRedisCmdParamList.push_back(std::to_string(nToScore));
+    m_vRedisCmdParamList.push_back(std::to_string(fFromScore));
+    m_vRedisCmdParamList.push_back(std::to_string(fToScore));
     return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
 }
 
-bool CFlyRedisClient::ZSCORE(const std::string& strKey, const std::string& strMember, int& nResult)
+bool CFlyRedisClient::ZSCORE(const std::string& strKey, const std::string& strMember, double& fResult)
 {
     if (!PrepareRunRedisCmd(strKey))
     {
@@ -465,7 +465,7 @@ bool CFlyRedisClient::ZSCORE(const std::string& strKey, const std::string& strMe
     m_vRedisCmdParamList.push_back("ZSCORE");
     m_vRedisCmdParamList.push_back(strKey);
     m_vRedisCmdParamList.push_back(strMember);
-    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseDouble(fResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::ZREM(const std::string& strKey, const std::string& strMember, int& nResult)
@@ -734,27 +734,24 @@ bool CFlyRedisClient::PrepareRunRedisCmd(const std::string& strKey)
 
 bool CFlyRedisClient::RunRedisCmdOnOneLineResponseInt(int& nResult, const char* pszCaller)
 {
-    if (nullptr == m_pCurRedisSession)
+    std::string strResult;
+    if (!RunRedisCmdOnOneLineResponseString(strResult, pszCaller))
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "CurRedisSessionIsNull: [%s]", pszCaller);
-        m_bHasBadRedisSession = true;
         return false;
     }
-    CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr(), m_vRedisCmdParamList, m_strRedisCmdRequest);
-    if (!m_pCurRedisSession->ProcRedisRequest(m_strRedisCmdRequest, m_vRedisResponseLine))
+    nResult = atoi(strResult.c_str());
+    return true;
+}
+
+
+bool CFlyRedisClient::RunRedisCmdOnOneLineResponseDouble(double& fResult, const char* pszCaller)
+{
+    std::string strResult;
+    if (!RunRedisCmdOnOneLineResponseString(strResult, pszCaller))
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "ProcRedisRequestFailed: [%s]", pszCaller);
-        m_bHasBadRedisSession = true;
         return false;
     }
-    // Parse line count
-    if (1 != m_vRedisResponseLine.size())
-    {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "ResponseLineCountInvalid: [%zu], Caller: [%s]", m_vRedisResponseLine.size(), pszCaller);
-        m_bHasBadRedisSession = true;
-        return false;
-    }
-    nResult = atoi(m_vRedisResponseLine[0].c_str());
+    fResult = atof(strResult.c_str());
     return true;
 }
 
