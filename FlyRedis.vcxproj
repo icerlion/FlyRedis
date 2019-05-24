@@ -7,14 +7,14 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\include\FlyRedis\FlyRedis.h" />
-    <ClInclude Include="..\..\include\FlyRedis\FlyRedisClient.h" />
-    <ClInclude Include="..\..\include\FlyRedis\FlyRedisSession.h" />
+    <ClInclude Include="include\FlyRedis\FlyRedis.h" />
+    <ClInclude Include="include\FlyRedis\FlyRedisClient.h" />
+    <ClInclude Include="include\FlyRedis\FlyRedisSession.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\include\FlyRedis\FlyRedis.cpp" />
-    <ClCompile Include="..\..\include\FlyRedis\FlyRedisClient.cpp" />
-    <ClCompile Include="..\..\include\FlyRedis\FlyRedisSession.cpp" />
+    <ClCompile Include="include\FlyRedis\FlyRedis.cpp" />
+    <ClCompile Include="include\FlyRedis\FlyRedisClient.cpp" />
+    <ClCompile Include="include\FlyRedis\FlyRedisSession.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{51B2CDB7-530C-4CAA-AC9D-4E9A074DF869}</ProjectGuid>
@@ -39,8 +39,8 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>$(ProjectDir)..\..\publish\$(Configuration)\</OutDir>
-    <IntDir>$(ProjectDir)..\..\bin\$(Configuration)\</IntDir>
+    <OutDir>$(ProjectDir)publish\</OutDir>
+    <IntDir>$(ProjectDir)build\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -50,7 +50,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_WIN32_WINNT=0x0600;WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>\boost_1_70_0;$(ProjectDir)..\..\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>\boost_1_70_0;$(ProjectDir)include</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
     </ClCompile>
     <Link>
