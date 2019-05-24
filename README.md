@@ -17,8 +17,8 @@ boost.asio
 *Option2: ___Recommand___ Include source code in your project, which is {fly_redis_home}/include/FlyRedis/*  
 
 ### How to build FlyRedis as Library?
-Windows: {fly_redis_home}/build/win/FlyRedis.vcxproj    
-Linux: {fly_redis_home}/build/linux/Makefile    
+Windows: {fly_redis_home}/FlyRedis.vcxproj    
+Linux: {fly_redis_home}/Makefile    
 
 ### How to test FlyRedis?
 Windows: {fly_redis_home}/sample/sample.vcxproj  
