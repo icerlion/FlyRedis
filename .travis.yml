@@ -6,6 +6,7 @@ sudo: false
 
 compiler:
     - gcc
+    - g++
 os:
     - linux
 
@@ -14,18 +15,5 @@ before_script:
     - cd boost_1_70_0 && ./bootstrap.sh --with-libraries=thread
     - ./b2 --ignore-site-config address-model=64 && cd ..
 
-addons:
-  apt:
-    sources:
-    - ubuntu-toolchain-r-test
-    packages:
-    - gcc-8
-    - g++-8
-
 script:
-    - $CXX --version
     - make
-
-
-install:
-    - if [ "$CXX" = "g++" ]; then export CXX="g++-5"; export CC="gcc-5"; fi
