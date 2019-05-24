@@ -37,3 +37,7 @@ hFlyRedisClient.SET("key", "value", strResult);
 hFlyRedisClient.GET("key", strResult);
 hFlyRedisClient.DEL("key", nResult);
 ```
+
+### Redis Command Support
+
+This project did not implement all Redis command, And I will add support in the further, at the same time, You can add implementation yourself, or you can send email to me, and I will add it in 7 days.
