@@ -268,7 +268,7 @@ bool CFlyRedisClient::HGETALL(const std::string& strKey, std::map<std::string, s
         m_bHasBadRedisSession = true;
         return false;
     }
-    CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr().c_str(), m_vRedisCmdParamList, m_strRedisCmdRequest);
+    CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr(), m_vRedisCmdParamList, m_strRedisCmdRequest);
     if (!m_pCurRedisSession->ProcRedisRequest(m_strRedisCmdRequest, m_vRedisResponseLine))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "ProcRedisRequestFailed: [%s]", __FUNCTION__);
@@ -349,7 +349,7 @@ bool CFlyRedisClient::HMGET(const std::string& strKey, const std::vector<std::st
         m_bHasBadRedisSession = true;
         return false;
     }
-    CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr().c_str(), m_vRedisCmdParamList, m_strRedisCmdRequest);
+    CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr(), m_vRedisCmdParamList, m_strRedisCmdRequest);
     if (!m_pCurRedisSession->ProcRedisRequest(m_strRedisCmdRequest, m_vRedisResponseLine))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "ProcRedisRequestFailed: [%s]", __FUNCTION__);
@@ -419,7 +419,7 @@ bool CFlyRedisClient::ZREVRANGE_WITHSCORES(const std::string& strKey, int nStart
         m_bHasBadRedisSession = true;
         return false;
     }
-    CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr().c_str(), m_vRedisCmdParamList, m_strRedisCmdRequest);
+    CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr(), m_vRedisCmdParamList, m_strRedisCmdRequest);
     if (!m_pCurRedisSession->ProcRedisRequest(m_strRedisCmdRequest, m_vRedisResponseLine))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "ProcRedisRequestFailed: [%s]", __FUNCTION__);
@@ -541,7 +541,7 @@ bool CFlyRedisClient::SMEMBERS(const std::string& strKey, std::vector<std::strin
         m_bHasBadRedisSession = true;
         return false;
     }
-    CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr().c_str(), m_vRedisCmdParamList, m_strRedisCmdRequest);
+    CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr(), m_vRedisCmdParamList, m_strRedisCmdRequest);
     if (!m_pCurRedisSession->ProcRedisRequest(m_strRedisCmdRequest, m_vRedisResponseLine))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "ProcRedisRequestFailed: [%s]", __FUNCTION__);
@@ -740,7 +740,7 @@ bool CFlyRedisClient::RunRedisCmdOnOneLineResponseInt(int& nResult, const char* 
         m_bHasBadRedisSession = true;
         return false;
     }
-    CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr().c_str(), m_vRedisCmdParamList, m_strRedisCmdRequest);
+    CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr(), m_vRedisCmdParamList, m_strRedisCmdRequest);
     if (!m_pCurRedisSession->ProcRedisRequest(m_strRedisCmdRequest, m_vRedisResponseLine))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "ProcRedisRequestFailed: [%s]", pszCaller);
@@ -766,7 +766,7 @@ bool CFlyRedisClient::RunRedisCmdOnOneLineResponseString(std::string& strResult,
         m_bHasBadRedisSession = true;
         return false;
     }
-    CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr().c_str(), m_vRedisCmdParamList, m_strRedisCmdRequest);
+    CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr(), m_vRedisCmdParamList, m_strRedisCmdRequest);
     if (!m_pCurRedisSession->ProcRedisRequest(m_strRedisCmdRequest, m_vRedisResponseLine))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "ProcRedisRequestFailed: [%s]", pszCaller);

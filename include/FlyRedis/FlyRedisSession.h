@@ -38,10 +38,10 @@ public:
     ~CFlyRedisSession();
 
     // Set redis address
-    bool SetRedisAddress(const std::string& strEndPoint);
+    void SetRedisAddress(const std::string& strAddress);
 
     // Get redis address
-    std::string GetRedisAddr() const;
+    const std::string& GetRedisAddr() const;
 
     // Connect to redis
     bool Connect();
@@ -80,9 +80,8 @@ private:
     bool ReadUntilCRLF(std::string& strLine);
 
 private:
-    // RedisServerConfig
-    std::string m_strIP;
-    int m_nPort;
+    // RedisAddress, format: host:port
+    std::string m_strRedisAddress;
     // SlotRange
     int m_nMinSlot;
     int m_nMaxSlot;

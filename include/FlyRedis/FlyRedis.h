@@ -71,7 +71,7 @@ public:
     }
 
     // Util function build RedisCmdRequest
-    static void BuildRedisCmdRequest(const char* pszRedisAddress, const std::vector<std::string>& vRedisCmdParamList, std::string& strRedisCmdRequest);
+    static void BuildRedisCmdRequest(const std::string& strRedisAddress, const std::vector<std::string>& vRedisCmdParamList, std::string& strRedisCmdRequest);
 
 private:
     // Get logger handler by log level

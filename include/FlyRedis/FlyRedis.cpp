@@ -214,7 +214,7 @@ std::vector<std::string> CFlyRedis::SplitString(const std::string& strInput, cha
     return vResult;
 }
 
-void CFlyRedis::BuildRedisCmdRequest(const char* pszRedisAddress, const std::vector<std::string>& vRedisCmdParamList, std::string& strRedisCmdRequest)
+void CFlyRedis::BuildRedisCmdRequest(const std::string& strRedisAddress, const std::vector<std::string>& vRedisCmdParamList, std::string& strRedisCmdRequest)
 {
     std::string strCmdLog;
     strRedisCmdRequest.clear();
@@ -229,13 +229,13 @@ void CFlyRedis::BuildRedisCmdRequest(const char* pszRedisAddress, const std::vec
         }
         else
         {
-            CFlyRedis::Logger(FlyRedisLogLevel::Command, "RedisCmd,%s,%s", pszRedisAddress, strCmdLog.c_str());
+            CFlyRedis::Logger(FlyRedisLogLevel::Command, "RedisCmd,%s,%s", strRedisAddress.c_str(), strCmdLog.c_str());
             strCmdLog.clear();
             strCmdLog.append(strParam).append(" ");
         }
     }
     if (!strCmdLog.empty())
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Command, "RedisCmd,%s,%s", pszRedisAddress, strCmdLog.c_str());
+        CFlyRedis::Logger(FlyRedisLogLevel::Command, "RedisCmd,%s,%s", strRedisAddress.c_str(), strCmdLog.c_str());
     }
 }
