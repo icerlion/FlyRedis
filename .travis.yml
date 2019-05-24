@@ -17,3 +17,7 @@ before_script:
 
 script:
     - make
+    - cd ./sample
+    - make
+    - ./publish/sample
+    - cd ..
