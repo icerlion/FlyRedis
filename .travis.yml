@@ -1,0 +1,31 @@
+language: cpp
+
+dist: trusty
+
+sudo: false
+
+compiler:
+    - gcc
+os:
+    - linux
+
+before_script:
+    - wget -q -O - https://sourceforge.net/projects/boost/files/boost/1.70.0/boost_1_70_0.tar.gz | tar -xz
+    - cd boost_1_70_0 && ./bootstrap.sh --with-libraries=thread
+    - ./b2 --ignore-site-config && cd ..
+
+addons:
+  apt:
+    sources:
+    - ubuntu-toolchain-r-test
+    packages:
+    - gcc-5
+    - g++-5
+
+script:
+    - $CXX --version
+    - make
+
+
+install:
+    - if [ "$CXX" = "g++" ]; then export CXX="g++-5"; export CC="gcc-5"; fi
