@@ -48,12 +48,32 @@ public:
     /// Begin of RedisCmd
     bool SCRIPT_LOAD(const std::string& strScript, std::string& strResult);
 
-    bool EXISTS(const std::string& strKey, int& nResult);
+    bool APPEND(const std::string& strKey, const std::string& strValue, int& nResult);
+    bool BITCOUNT(const std::string& strKey, int nStart, int nEnd, int& nResult);
+    bool BITCOUNT(const std::string& strKey, int& nResult);
+    bool BITFIELD(const std::string& strKey, int& nResult);
+    bool BITOP_AND(const std::string& strDestKey, const std::string& strSrcKey, int& nResult);
+    bool BITOP_OR(const std::string& strDestKey, const std::string& strSrcKey, int& nResult);
+    bool BITOP_XOR(const std::string& strDestKey, const std::string& strSrcKey, int& nResult);
+    bool BITOP_NOT(const std::string& strKey, int& nResult);
+    bool BITPOS(const std::string& strKey, int nBit, int& nResult);
+    bool BITPOS(const std::string& strKey, int nBit, int nStart, int nEnd, int& nResult);
+    bool DECR(const std::string& strKey, int& nResult);
+    bool DECRBY(const std::string& strKey, int nDecrement, int& nResult);
     bool GET(const std::string& strKey, std::string& strResult);
+    bool GETBIT(const std::string& strKey, int nOffset, int& nResult);
+    bool GETRANGE(const std::string& strKey, int nStart, int nEnd, std::string& strResult);
+    bool GETSET(const std::string& strKey, const std::string& strValue, std::string& strResult);
+    bool INCR(const std::string& strKey, int& nResult);
+    bool INCRBY(const std::string& strKey, int nIncrement, int& nResult);
+    bool INCRBYFLOAT(const std::string& strKey, double fIncrement, double& fResult);
+
+    bool EXISTS(const std::string& strKey, int& nResult);
+    
     bool SET(const std::string& strKey, const std::string& strValue, std::string& strResult);
     bool DEL(const std::string& strKey, int& nResult);
     bool SETEX(const std::string& strKey, int nTimeOutSeconds, const std::string& strValue, std::string& strResult);
-    bool INCR(const std::string& strKey, int& nResult);
+    
 
     bool HSET(const std::string& strKey, const std::string& strField, const std::string& strValue, int& nResult);
     bool HSETNX(const std::string& strKey, const std::string& strField, const std::string& strValue, int& nResult);

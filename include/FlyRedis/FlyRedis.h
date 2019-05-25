@@ -53,6 +53,7 @@ public:
     static void Logger(FlyRedisLogLevel nLevel, const char* pszMsgFormat, ...);
 
     // Calc the slot index
+    static int KeyHashSlot(const std::string& strKey);
     static int KeyHashSlot(const char* pszKey, int nKeyLen);
 
     // Util function split string

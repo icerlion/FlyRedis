@@ -86,6 +86,252 @@ void CFlyRedisClient::Close()
     m_bHasBadRedisSession = false;
 }
 
+bool CFlyRedisClient::APPEND(const std::string& strKey, const std::string& strValue, int& nResult)
+{
+    if (!PrepareRunRedisCmd(strKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("APPEND");
+    m_vRedisCmdParamList.push_back(strKey);
+    m_vRedisCmdParamList.push_back(strValue);
+    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::BITCOUNT(const std::string& strKey, int& nResult)
+{
+    if (!PrepareRunRedisCmd(strKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("BITCOUNT");
+    m_vRedisCmdParamList.push_back(strKey);
+    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::BITCOUNT(const std::string& strKey, int nStart, int nEnd, int& nResult)
+{
+    if (!PrepareRunRedisCmd(strKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("BITCOUNT");
+    m_vRedisCmdParamList.push_back(strKey);
+    m_vRedisCmdParamList.push_back(std::to_string(nStart));
+    m_vRedisCmdParamList.push_back(std::to_string(nEnd));
+    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::BITFIELD(const std::string& strKey, int& nResult)
+{
+    if (!PrepareRunRedisCmd(strKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("BITFIELD");
+    m_vRedisCmdParamList.push_back(strKey);
+    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::BITOP_AND(const std::string& strDestKey, const std::string& strSrcKey, int& nResult)
+{
+    if (m_bClusterFlag && CFlyRedis::KeyHashSlot(strDestKey) != CFlyRedis::KeyHashSlot(strSrcKey))
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "CROSSSLOT Keys in request don't hash to the same slot");
+        return false;
+    }
+    if (!PrepareRunRedisCmd(strDestKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("BITOP");
+    m_vRedisCmdParamList.push_back("AND");
+    m_vRedisCmdParamList.push_back(strDestKey);
+    m_vRedisCmdParamList.push_back(strSrcKey);
+    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::BITOP_OR(const std::string& strDestKey, const std::string& strSrcKey, int& nResult)
+{
+    if (m_bClusterFlag && CFlyRedis::KeyHashSlot(strDestKey) != CFlyRedis::KeyHashSlot(strSrcKey))
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "CROSSSLOT Keys in request don't hash to the same slot");
+        return false;
+    }
+    if (!PrepareRunRedisCmd(strDestKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("BITOP");
+    m_vRedisCmdParamList.push_back("OR");
+    m_vRedisCmdParamList.push_back(strDestKey);
+    m_vRedisCmdParamList.push_back(strSrcKey);
+    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::BITOP_XOR(const std::string& strDestKey, const std::string& strSrcKey, int& nResult)
+{
+    if (m_bClusterFlag && CFlyRedis::KeyHashSlot(strDestKey) != CFlyRedis::KeyHashSlot(strSrcKey))
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "CROSSSLOT Keys in request don't hash to the same slot");
+        return false;
+    }
+    if (!PrepareRunRedisCmd(strDestKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("BITOP");
+    m_vRedisCmdParamList.push_back("XOR");
+    m_vRedisCmdParamList.push_back(strDestKey);
+    m_vRedisCmdParamList.push_back(strSrcKey);
+    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::BITOP_NOT(const std::string& strKey, int& nResult)
+{
+    if (!PrepareRunRedisCmd(strKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("BITOP");
+    m_vRedisCmdParamList.push_back("NOT");
+    m_vRedisCmdParamList.push_back(strKey);
+    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::BITPOS(const std::string& strKey, int nBit, int& nResult)
+{
+    if (!PrepareRunRedisCmd(strKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("BITPOS");
+    m_vRedisCmdParamList.push_back(strKey);
+    m_vRedisCmdParamList.push_back(std::to_string(nBit));
+    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::BITPOS(const std::string& strKey, int nBit, int nStart, int nEnd, int& nResult)
+{
+    if (!PrepareRunRedisCmd(strKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("BITPOS");
+    m_vRedisCmdParamList.push_back(strKey);
+    m_vRedisCmdParamList.push_back(std::to_string(nBit));
+    m_vRedisCmdParamList.push_back(std::to_string(nStart));
+    m_vRedisCmdParamList.push_back(std::to_string(nEnd));
+    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::DECR(const std::string& strKey, int& nResult)
+{
+    if (!PrepareRunRedisCmd(strKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("DECR");
+    m_vRedisCmdParamList.push_back(strKey);
+    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::DECRBY(const std::string& strKey, int nDecrement, int& nResult)
+{
+    if (!PrepareRunRedisCmd(strKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("DECRBY");
+    m_vRedisCmdParamList.push_back(strKey);
+    m_vRedisCmdParamList.push_back(std::to_string(nDecrement));
+    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::GET(const std::string& strKey, std::string& strResult)
+{
+    if (!PrepareRunRedisCmd(strKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("GET");
+    m_vRedisCmdParamList.push_back(strKey);
+    return RunRedisCmdOnOneLineResponseString(strResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::GETBIT(const std::string& strKey, int nOffset, int& nResult)
+{
+    if (!PrepareRunRedisCmd(strKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("GETBIT");
+    m_vRedisCmdParamList.push_back(strKey);
+    m_vRedisCmdParamList.push_back(std::to_string(nOffset));
+    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::GETRANGE(const std::string& strKey, int nStart, int nEnd, std::string& strResult)
+{
+    if (!PrepareRunRedisCmd(strKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("GETRANGE");
+    m_vRedisCmdParamList.push_back(strKey);
+    m_vRedisCmdParamList.push_back(std::to_string(nStart));
+    m_vRedisCmdParamList.push_back(std::to_string(nEnd));
+    return RunRedisCmdOnOneLineResponseString(strResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::GETSET(const std::string& strKey, const std::string& strValue, std::string& strResult)
+{
+    if (!PrepareRunRedisCmd(strKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("GETSET");
+    m_vRedisCmdParamList.push_back(strKey);
+    m_vRedisCmdParamList.push_back(strValue);
+    return RunRedisCmdOnOneLineResponseString(strResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::INCR(const std::string& strKey, int& nResult)
+{
+    if (!PrepareRunRedisCmd(strKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("INCR");
+    m_vRedisCmdParamList.push_back(strKey);
+    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::INCRBY(const std::string& strKey, int nIncrement, int& nResult)
+{
+    if (!PrepareRunRedisCmd(strKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("INCR");
+    m_vRedisCmdParamList.push_back(strKey);
+    m_vRedisCmdParamList.push_back(std::to_string(nIncrement));
+    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
+}
+
+
+bool CFlyRedisClient::INCRBYFLOAT(const std::string& strKey, double fIncrement, double& fResult)
+{
+    if (!PrepareRunRedisCmd(strKey))
+    {
+        return false;
+    }
+    m_vRedisCmdParamList.push_back("INCR");
+    m_vRedisCmdParamList.push_back(strKey);
+    m_vRedisCmdParamList.push_back(std::to_string(fIncrement));
+    return RunRedisCmdOnOneLineResponseDouble(fResult, __FUNCTION__);
+}
+
 bool CFlyRedisClient::VerifyRedisSessionList()
 {
     if (!m_bHasBadRedisSession)
@@ -140,17 +386,6 @@ bool CFlyRedisClient::EXISTS(const std::string& strKey, int& nResult)
     return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
 }
 
-bool CFlyRedisClient::GET(const std::string& strKey, std::string& strResult)
-{
-    if (!PrepareRunRedisCmd(strKey))
-    {
-        return false;
-    }
-    m_vRedisCmdParamList.push_back("GET");
-    m_vRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseString(strResult, __FUNCTION__);
-}
-
 bool CFlyRedisClient::SET(const std::string& strKey, const std::string& strValue, std::string& strResult)
 {
     if (!PrepareRunRedisCmd(strKey))
@@ -185,17 +420,6 @@ bool CFlyRedisClient::SETEX(const std::string& strKey, int nTimeOutSeconds, cons
     m_vRedisCmdParamList.push_back(std::to_string(nTimeOutSeconds));
     m_vRedisCmdParamList.push_back(strValue);
     return RunRedisCmdOnOneLineResponseString(strResult, __FUNCTION__);
-}
-
-bool CFlyRedisClient::INCR(const std::string& strKey, int& nResult)
-{
-    if (!PrepareRunRedisCmd(strKey))
-    {
-        return false;
-    }
-    m_vRedisCmdParamList.push_back("INCR");
-    m_vRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseInt(nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::HSET(const std::string& strKey, const std::string& strField, const std::string& strValue, int& nResult)
@@ -558,7 +782,7 @@ bool CFlyRedisClient::ResolveRedisSession(const std::string& strKey)
     {
         return m_pCurRedisSession != nullptr;
     }
-    int nSlot = CFlyRedis::KeyHashSlot(strKey.c_str(), (int)strKey.length());
+    int nSlot = CFlyRedis::KeyHashSlot(strKey);
     if (nullptr != m_pCurRedisSession && m_pCurRedisSession->AcceptHashSlot(nSlot))
     {
         return true;

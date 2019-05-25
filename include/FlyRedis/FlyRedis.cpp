@@ -183,6 +183,11 @@ int CFlyRedis::KeyHashSlot(const char* pszKey, int nKeyLen)
     return CRC16(pszKey + nStart + 1, nEnd - nStart - 1) & 0x3FFF;
 }
 
+int CFlyRedis::KeyHashSlot(const std::string& strKey)
+{
+    return KeyHashSlot(strKey.c_str(), (int)strKey.length());
+}
+
 std::vector<std::string> CFlyRedis::SplitString(const std::string& strInput, char chDelim)
 {
     std::vector<std::string> vResult;
