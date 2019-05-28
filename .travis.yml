@@ -3,7 +3,6 @@ language: cpp
 sudo: false
 
 compiler:
-    - gcc
     - g++
 os:
     - linux
