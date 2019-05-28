@@ -56,25 +56,25 @@ public:
     bool SetSelfSlotRange(const std::string& strSlotRange);
 
     // Process redis cmd request
-    bool ProcRedisRequest(const std::string& strRedisCmdRequest, std::vector<std::string>& vRedisResponseLine);
+    bool ProcRedisRequest(const std::string& strRedisCmdRequest, std::vector<std::string>& vecRedisResponseLine);
 
     //////////////////////////////////////////////////////////////////////////
     /// Begin of RedisCmd
     bool AUTH(std::string& strPassword);
     bool PING();
     bool INFO_CLUSTER(bool& bClusterEnable);
-    bool CLUSTER_NODES(std::vector<std::string>& vResult);
+    bool CLUSTER_NODES(std::vector<std::string>& vecResult);
     bool SCRIPT_LOAD(const std::string& strScript, std::string& strResult);
     /// End of RedisCmd
     //////////////////////////////////////////////////////////////////////////
 private:
     // Recv redis response
-    bool RecvRedisResponse(std::vector<std::string>& vRedisResponseLine);
-    bool ReadRedisResponseError(std::vector<std::string>& vRedisResponseLine);
-    bool ReadRedisResponseSimpleStrings(std::vector<std::string>& vRedisResponseLine);
-    bool ReadRedisResponseIntegers(std::vector<std::string>& vRedisResponseLine);
-    bool ReadRedisResponseBulkStrings(std::vector<std::string>& vRedisResponseLine);
-    bool ReadRedisResponseArrays(std::vector<std::string>& vRedisResponseLine);
+    bool RecvRedisResponse(std::vector<std::string>& vecRedisResponseLine);
+    bool ReadRedisResponseError(std::vector<std::string>& vecRedisResponseLine);
+    bool ReadRedisResponseSimpleStrings(std::vector<std::string>& vecRedisResponseLine);
+    bool ReadRedisResponseIntegers(std::vector<std::string>& vecRedisResponseLine);
+    bool ReadRedisResponseBulkStrings(std::vector<std::string>& vecRedisResponseLine);
+    bool ReadRedisResponseArrays(std::vector<std::string>& vecRedisResponseLine);
 
     // Read one line from socket
     bool ReadUntilCRLF(std::string& strLine);

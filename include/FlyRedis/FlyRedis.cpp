@@ -141,6 +141,42 @@ int CFlyRedis::CRC16(const char* buff, int nBuffLen)
     return nCRCValue;
 }
 
+bool CFlyRedis::IsMlutiKeyOnTheSameSlot(const std::string& strKeyFirst, const std::string& strKeySecond)
+{
+    return KeyHashSlot(strKeyFirst) == KeyHashSlot(strKeySecond);
+}
+
+bool CFlyRedis::IsMlutiKeyOnTheSameSlot(const std::vector<std::string>& vecKey)
+{
+    std::set<int> setSlot;
+    for (auto& strKey : vecKey)
+    {
+        setSlot.insert(KeyHashSlot(strKey));
+    }
+    return setSlot.size() == 1;
+}
+
+bool CFlyRedis::IsMlutiKeyOnTheSameSlot(const std::map<std::string, std::string>& mapKeyValue)
+{
+    std::set<int> setSlot;
+    for (auto& kvp : mapKeyValue)
+    {
+        setSlot.insert(KeyHashSlot(kvp.first));
+    }
+    return setSlot.size() == 1;
+}
+
+bool CFlyRedis::IsMlutiKeyOnTheSameSlot(const std::vector<std::string>& vecKey, const std::string& strMoreKey)
+{
+    std::set<int> setSlot;
+    setSlot.insert(KeyHashSlot(strMoreKey));
+    for (auto& strKey : vecKey)
+    {
+        setSlot.insert(KeyHashSlot(strKey));
+    }
+    return setSlot.size() == 1;
+}
+
 int CFlyRedis::KeyHashSlot(const char* pszKey, int nKeyLen)
 {
     //////////////////////////////////////////////////////////////////////////
@@ -190,10 +226,10 @@ int CFlyRedis::KeyHashSlot(const std::string& strKey)
 
 std::vector<std::string> CFlyRedis::SplitString(const std::string& strInput, char chDelim)
 {
-    std::vector<std::string> vResult;
+    std::vector<std::string> vecResult;
     if (strInput.empty())
     {
-        return vResult;
+        return vecResult;
     }
     std::string strToken;
     for (char chValue : strInput)
@@ -204,27 +240,27 @@ std::vector<std::string> CFlyRedis::SplitString(const std::string& strInput, cha
         }
         else
         {
-            vResult.push_back(strToken);
+            vecResult.push_back(strToken);
             strToken.clear();
         }
     }
     if (!strToken.empty())
     {
-        vResult.push_back(strToken);
+        vecResult.push_back(strToken);
     }
     if (strInput.back() == chDelim)
     {
-        vResult.push_back("");
+        vecResult.push_back("");
     }
-    return vResult;
+    return vecResult;
 }
 
-void CFlyRedis::BuildRedisCmdRequest(const std::string& strRedisAddress, const std::vector<std::string>& vRedisCmdParamList, std::string& strRedisCmdRequest)
+void CFlyRedis::BuildRedisCmdRequest(const std::string& strRedisAddress, const std::vector<std::string>& vecRedisCmdParamList, std::string& strRedisCmdRequest)
 {
     std::string strCmdLog;
     strRedisCmdRequest.clear();
-    strRedisCmdRequest.append("*").append(std::to_string((int)vRedisCmdParamList.size())).append("\r\n");
-    for (const std::string& strParam : vRedisCmdParamList)
+    strRedisCmdRequest.append("*").append(std::to_string((int)vecRedisCmdParamList.size())).append("\r\n");
+    for (const std::string& strParam : vecRedisCmdParamList)
     {
         strRedisCmdRequest.append("$").append(std::to_string((int)strParam.length())).append("\r\n");
         strRedisCmdRequest.append(strParam).append("\r\n");

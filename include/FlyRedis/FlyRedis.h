@@ -53,6 +53,10 @@ public:
     static void Logger(FlyRedisLogLevel nLevel, const char* pszMsgFormat, ...);
 
     // Calc the slot index
+    static bool IsMlutiKeyOnTheSameSlot(const std::string& strKeyFirst, const std::string& strKeySecond);
+    static bool IsMlutiKeyOnTheSameSlot(const std::vector<std::string>& vecKey);
+    static bool IsMlutiKeyOnTheSameSlot(const std::vector<std::string>& vecKey, const std::string& strMoreKey);
+    static bool IsMlutiKeyOnTheSameSlot(const std::map<std::string, std::string>& mapKeyValue);
     static int KeyHashSlot(const std::string& strKey);
     static int KeyHashSlot(const char* pszKey, int nKeyLen);
 
@@ -72,7 +76,7 @@ public:
     }
 
     // Util function build RedisCmdRequest
-    static void BuildRedisCmdRequest(const std::string& strRedisAddress, const std::vector<std::string>& vRedisCmdParamList, std::string& strRedisCmdRequest);
+    static void BuildRedisCmdRequest(const std::string& strRedisAddress, const std::vector<std::string>& vecRedisCmdParamList, std::string& strRedisCmdRequest);
 
 private:
     // Get logger handler by log level
