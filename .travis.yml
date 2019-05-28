@@ -1,7 +1,5 @@
 language: cpp
 
-dist: trusty
-
 sudo: false
 
 compiler:
@@ -12,8 +10,6 @@ os:
 
 before_script:
     - wget -q -O - https://sourceforge.net/projects/boost/files/boost/1.70.0/boost_1_70_0.tar.gz | tar -xz
-    - cd boost_1_70_0 && ./bootstrap.sh --with-libraries=thread
-    - ./b2 --ignore-site-config address-model=64 && cd ..
 
 script:
     - make
