@@ -225,7 +225,6 @@ BOOST_AUTO_TEST_CASE(KEY_STRING_ERASE)
     std::string strKey = "key_erase_" + std::to_string(time(nullptr));
     std::string strValue = std::to_string(time(nullptr));
     int nResult = 0;
-    double fResult = 0.0f;
     std::string strResult;
 
     BOOST_CHECK(pFlyRedisClient->SET(strKey, strValue));
@@ -247,7 +246,7 @@ BOOST_AUTO_TEST_CASE(KEY_STRING_ERASE)
     BOOST_CHECK_LE(nResult, 10 * 1000);
 
     BOOST_CHECK(pFlyRedisClient->SET(strKey, strValue));
-    BOOST_CHECK(pFlyRedisClient->EXPIREAT(strKey, time(nullptr) + 60, nResult));
+    BOOST_CHECK(pFlyRedisClient->EXPIREAT(strKey, static_cast<int>(time(nullptr) + 60), nResult));
     BOOST_CHECK_EQUAL(nResult, 1);
     BOOST_CHECK(pFlyRedisClient->TTL(strKey, nResult));
     BOOST_CHECK_LE(nResult, 60);
@@ -261,7 +260,7 @@ BOOST_AUTO_TEST_CASE(KEY_STRING_ERASE)
     BOOST_CHECK(pFlyRedisClient->PTTL(strKey, nResult));
     BOOST_CHECK_LE(nResult, 10 * 1000);
 
-    BOOST_CHECK(pFlyRedisClient->PEXPIREAT(strKey, (time(nullptr) + 60) * 1000, nResult));
+    BOOST_CHECK(pFlyRedisClient->PEXPIREAT(strKey, static_cast<int>((time(nullptr) + 60) * 1000), nResult));
     BOOST_CHECK_EQUAL(nResult, 1);
     BOOST_CHECK(pFlyRedisClient->TTL(strKey, nResult));
     BOOST_CHECK_LE(nResult, 60);
@@ -405,10 +404,10 @@ BOOST_AUTO_TEST_CASE(KEY_ZSET)
     BOOST_CHECK(pFlyRedisClient->ZREMRANGEBYSCORE(strKey, -1, 1, nResult));
     BOOST_CHECK_EQUAL(nResult, 0);
 
-    BOOST_CHECK(pFlyRedisClient->ZREVRANGE(strKey, 0.0f, -1, vecResult));
+    BOOST_CHECK(pFlyRedisClient->ZREVRANGE(strKey, 0, -1, vecResult));
     BOOST_CHECK_EQUAL(vecResult.size(), 1);
 
-    BOOST_CHECK(pFlyRedisClient->ZREVRANGE_WITHSCORES(strKey, 0.0f, -1, vecPairResult));
+    BOOST_CHECK(pFlyRedisClient->ZREVRANGE_WITHSCORES(strKey, 0, -1, vecPairResult));
     BOOST_CHECK_EQUAL(vecResult.size(), 1);
 
     DESTROY_REDIS_CLIENT();
@@ -423,7 +422,6 @@ BOOST_AUTO_TEST_CASE(KEY_LIST)
     std::string strValue2 = "value2_" + std::to_string(time(nullptr));
     std::string strValue3 = "value3_" + std::to_string(time(nullptr));
     int nResult = 0;
-    double fResult = 0.0f;
     std::string strResult;
     std::vector<std::string> vecResult;
 
@@ -520,9 +518,12 @@ BOOST_AUTO_TEST_CASE(KEY_SET)
     std::string strMember4 = "member4_" + std::to_string(time(nullptr));
     std::string strMember5 = "member5_" + std::to_string(time(nullptr));
     int nResult = 0;
-    double fResult = 0.0f;
     std::string strResult;
     std::vector<std::string> vecResult;
+
+    BOOST_CHECK(pFlyRedisClient->DEL(strKey1, nResult));
+    BOOST_CHECK(pFlyRedisClient->DEL(strKey2, nResult));
+    BOOST_CHECK(pFlyRedisClient->DEL(strKey3, nResult));
 
     BOOST_CHECK(pFlyRedisClient->SISMEMBER(strKey1, strMember1, nResult));
     BOOST_CHECK_EQUAL(nResult, 0);
@@ -577,7 +578,7 @@ BOOST_AUTO_TEST_CASE(KEY_SET)
     BOOST_CHECK(pFlyRedisClient->SUNION(vecSrcKey, vecResult));
     BOOST_CHECK(pFlyRedisClient->DEL(strKey3, nResult));
     BOOST_CHECK(pFlyRedisClient->SUNIONSTORE(strKey3, vecSrcKey, nResult));
-    BOOST_CHECK_EQUAL(nResult, 2);
+    BOOST_CHECK_EQUAL(nResult, 4);
 
     BOOST_CHECK(pFlyRedisClient->SMOVE(strKey1, strKey2, strMember1, nResult));
     BOOST_CHECK_EQUAL(nResult, 1);
