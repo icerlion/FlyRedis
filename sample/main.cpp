@@ -17,9 +17,9 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword)
     // You are free to run every redis cmd.
     std::string strResult;
     int nResult = 0;
-    for (int i = 0; i < 1000; ++i)
+    for (int i = 0; i < 10000; ++i)
     {
-        if (!hFlyRedisClient.SET("key", "value", strResult))
+        if (!hFlyRedisClient.SET("key", "value"))
         {
             Logger("GET FAILED");
             continue;

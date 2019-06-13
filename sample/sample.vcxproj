@@ -49,7 +49,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>\boost_1_70_0\stage\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(ProjectDir)..\publish\Debug\FlyRedis.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(ProjectDir)..\publish\FlyRedis.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
