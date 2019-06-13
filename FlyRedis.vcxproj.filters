@@ -13,20 +13,8 @@
     <ClInclude Include="include\FlyRedis\FlyRedis.h">
       <Filter>include\FlyRedis</Filter>
     </ClInclude>
-    <ClInclude Include="include\FlyRedis\FlyRedisClient.h">
-      <Filter>include\FlyRedis</Filter>
-    </ClInclude>
-    <ClInclude Include="include\FlyRedis\FlyRedisSession.h">
-      <Filter>include\FlyRedis</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="include\FlyRedis\FlyRedisClient.cpp">
-      <Filter>include\FlyRedis</Filter>
-    </ClCompile>
-    <ClCompile Include="include\FlyRedis\FlyRedisSession.cpp">
-      <Filter>include\FlyRedis</Filter>
-    </ClCompile>
     <ClCompile Include="include\FlyRedis\FlyRedis.cpp">
       <Filter>include\FlyRedis</Filter>
     </ClCompile>

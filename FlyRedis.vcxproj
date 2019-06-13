@@ -8,13 +8,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\FlyRedis\FlyRedis.h" />
-    <ClInclude Include="include\FlyRedis\FlyRedisClient.h" />
-    <ClInclude Include="include\FlyRedis\FlyRedisSession.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="include\FlyRedis\FlyRedis.cpp" />
-    <ClCompile Include="include\FlyRedis\FlyRedisClient.cpp" />
-    <ClCompile Include="include\FlyRedis\FlyRedisSession.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{51B2CDB7-530C-4CAA-AC9D-4E9A074DF869}</ProjectGuid>
