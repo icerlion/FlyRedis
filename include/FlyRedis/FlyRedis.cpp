@@ -1764,6 +1764,10 @@ bool CFlyRedisClient::ConnectToOneClusterNode(const RedisClusterNodesLine& stRed
     }
     pRedisSession->SetSelfSlotRange(stRedisNode.nMinSlot, stRedisNode.nMaxSlot);
     pRedisSession->SetMasterNodeFlag(stRedisNode.bIsMaster);
+    if (!stRedisNode.bIsMaster && FlyRedisReadWriteType::ReadOnSlaveWriteOnMaster == m_nFlyRedisReadWriteType)
+    {
+        pRedisSession->READONLY();
+    }
     return true;
 }
 
@@ -1785,12 +1789,6 @@ CFlyRedisSession* CFlyRedisClient::CreateRedisSession(const std::string& strRedi
         return nullptr;
     }
     if (!pRedisSession->AUTH(m_strRedisPasswod))
-    {
-        delete pRedisSession;
-        pRedisSession = nullptr;
-        return nullptr;
-    }
-    if (FlyRedisReadWriteType::ReadOnSlaveWriteOnMaster == m_nFlyRedisReadWriteType && !pRedisSession->READONLY())
     {
         delete pRedisSession;
         pRedisSession = nullptr;
