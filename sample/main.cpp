@@ -10,6 +10,8 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword)
 {
     CFlyRedisClient hFlyRedisClient;
     hFlyRedisClient.SetRedisConfig(strRedisAddr, strPassword);
+    hFlyRedisClient.SetRedisReadTimeOutSeconds(10);
+    hFlyRedisClient.SetFlyRedisReadWriteType(FlyRedisReadWriteType::ReadWriteOnMaster);
     if (!hFlyRedisClient.Open())
     {
         return;
@@ -19,17 +21,18 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword)
     int nResult = 0;
     for (int i = 0; i < 10000; ++i)
     {
-        if (!hFlyRedisClient.SET("key", "value"))
+        std::string strKey = "key_" + std::to_string(i);
+        if (!hFlyRedisClient.SET(strKey, "value"))
         {
             Logger("GET FAILED");
             continue;
         }
-        if (!hFlyRedisClient.GET("key", strResult))
+        if (!hFlyRedisClient.GET(strKey, strResult))
         {
             Logger("GET FAILED");
             continue;
         }
-        if (!hFlyRedisClient.DEL("key", nResult))
+        if (!hFlyRedisClient.DEL(strKey, nResult))
         {
             Logger("GET FAILED");
             continue;
@@ -53,7 +56,6 @@ int main(int argc, char* argv[])
     CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Error, Logger);
     //CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Warning, Logger);
     //CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Command, Logger);
-    CFlyRedis::SetRedisReadTimeOutSeconds(10);
     boost::thread_group tg;
     for (int i = 0; i < 10; ++i)
     {
