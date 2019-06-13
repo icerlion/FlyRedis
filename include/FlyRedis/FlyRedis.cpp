@@ -28,8 +28,10 @@
 // Begin of RedisSession function
 CFlyRedisSession::CFlyRedisSession()
     :m_strRedisAddress(),
+    m_nReadTimeOutSeconds(5),
     m_nMinSlot(0),
     m_nMaxSlot(0),
+    m_bIsMasterNode(false),
     m_boostTCPIOStream(),
     m_buffBulkStrings(),
     m_bRedisResponseError(false)
@@ -44,6 +46,11 @@ CFlyRedisSession::~CFlyRedisSession()
 void CFlyRedisSession::SetRedisAddress(const std::string& strAddress)
 {
     m_strRedisAddress = strAddress;
+}
+
+void CFlyRedisSession::SetReadTimeOut(int nSeconds)
+{
+    m_nReadTimeOutSeconds = nSeconds;
 }
 
 const std::string& CFlyRedisSession::GetRedisAddr() const
@@ -86,17 +93,19 @@ bool CFlyRedisSession::Connect()
     return true;
 }
 
-bool CFlyRedisSession::SetSelfSlotRange(const std::string& strSlotRange)
+bool CFlyRedisSession::AcceptHashSlot(int nSlot, bool bIsWrite, FlyRedisReadWriteType nFlyRedisReadWriteType) const
 {
-    std::vector<std::string> vecIntField = CFlyRedis::SplitString(strSlotRange, '-');
-    if (vecIntField.size() != 2)
+    if (FlyRedisReadWriteType::ReadOnSlaveWriteOnMaster == nFlyRedisReadWriteType && bIsWrite != m_bIsMasterNode)
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "InvalidFieldLen: [%s] Slot: [%s]", m_strRedisAddress.c_str(), strSlotRange.c_str());
         return false;
     }
-    m_nMinSlot = atoi(vecIntField[0].c_str());
-    m_nMaxSlot = atoi(vecIntField[1].c_str());
-    return m_nMaxSlot >= m_nMinSlot;
+    return nSlot >= m_nMinSlot && nSlot <= m_nMaxSlot;
+}
+
+void CFlyRedisSession::SetSelfSlotRange(int nMinSlot, int nMaxSlot)
+{
+    m_nMinSlot = nMinSlot;
+    m_nMaxSlot = nMaxSlot;
 }
 
 bool CFlyRedisSession::ProcRedisRequest(const std::string& strRedisCmdRequest, std::vector<std::string>& vecRedisResponseLine)
@@ -105,7 +114,7 @@ bool CFlyRedisSession::ProcRedisRequest(const std::string& strRedisCmdRequest, s
     vecRedisResponseLine.clear();
     m_bRedisResponseError = false;
     // Send Msg To RedisServer
-    m_boostTCPIOStream.expires_after(std::chrono::seconds(CFlyRedis::GetRedisReadTimeOutSeconds()));
+    m_boostTCPIOStream.expires_after(std::chrono::seconds(m_nReadTimeOutSeconds));
     m_boostTCPIOStream.write(strRedisCmdRequest.c_str(), strRedisCmdRequest.length());
     if (!RecvRedisResponse(vecRedisResponseLine))
     {
@@ -151,6 +160,25 @@ bool CFlyRedisSession::PING()
     }
     const std::string& strResponse = vecRedisResponseLine[0];
     return strResponse.compare("PONG") == 0;
+}
+
+bool CFlyRedisSession::READONLY()
+{
+    std::vector<std::string> vecRedisCmdParamList;
+    vecRedisCmdParamList.push_back("READONLY");
+    std::string strRedisCmdRequest;
+    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest);
+    std::vector<std::string> vecRedisResponseLine;
+    if (!ProcRedisRequest(strRedisCmdRequest, vecRedisResponseLine))
+    {
+        return false;
+    }
+    if (1 != vecRedisResponseLine.size())
+    {
+        return false;
+    }
+    const std::string& strResponse = vecRedisResponseLine[0];
+    return strResponse.compare("OK") == 0;
 }
 
 bool CFlyRedisSession::INFO_CLUSTER(bool& bClusterEnable)
@@ -223,7 +251,7 @@ bool CFlyRedisSession::SCRIPT_LOAD(const std::string& strScript, std::string& st
 bool CFlyRedisSession::RecvRedisResponse(std::vector<std::string>& vecRedisResponseLine)
 {
     char chHead = 0;
-    m_boostTCPIOStream.expires_after(std::chrono::seconds(CFlyRedis::GetRedisReadTimeOutSeconds()));
+    m_boostTCPIOStream.expires_after(std::chrono::seconds(m_nReadTimeOutSeconds));
     m_boostTCPIOStream.read(&chHead, 1);
     bool bResult = false;
     switch (chHead)
@@ -319,21 +347,21 @@ bool CFlyRedisSession::ReadRedisResponseBulkStrings(std::vector<std::string>& ve
     {
         if (nLen <= CONST_BUFF_BULK_STRINGS_ONCE_LEN)
         {
-            m_boostTCPIOStream.expires_after(std::chrono::seconds(CFlyRedis::GetRedisReadTimeOutSeconds()));
+            m_boostTCPIOStream.expires_after(std::chrono::seconds(m_nReadTimeOutSeconds));
             m_boostTCPIOStream.read(m_buffBulkStrings, nLen);
             strBulkStrings.append(m_buffBulkStrings, nLen);
             break;
         }
         else
         {
-            m_boostTCPIOStream.expires_after(std::chrono::seconds(CFlyRedis::GetRedisReadTimeOutSeconds()));
+            m_boostTCPIOStream.expires_after(std::chrono::seconds(m_nReadTimeOutSeconds));
             m_boostTCPIOStream.read(m_buffBulkStrings, CONST_BUFF_BULK_STRINGS_ONCE_LEN);
             strBulkStrings.append(m_buffBulkStrings, CONST_BUFF_BULK_STRINGS_ONCE_LEN);
             nLen -= CONST_BUFF_BULK_STRINGS_ONCE_LEN;
         }
     }
     // Read tail CRLF to make stream empty
-    m_boostTCPIOStream.expires_after(std::chrono::seconds(CFlyRedis::GetRedisReadTimeOutSeconds()));
+    m_boostTCPIOStream.expires_after(std::chrono::seconds(m_nReadTimeOutSeconds));
     m_boostTCPIOStream.read(m_buffBulkStrings, 2);
     vecRedisResponseLine.push_back(strBulkStrings);
     return true;
@@ -369,7 +397,7 @@ bool CFlyRedisSession::ReadUntilCRLF(std::string& strLine)
     while (true)
     {
         char chCurValue = 0;
-        m_boostTCPIOStream.expires_after(std::chrono::seconds(CFlyRedis::GetRedisReadTimeOutSeconds()));
+        m_boostTCPIOStream.expires_after(std::chrono::seconds(m_nReadTimeOutSeconds));
         m_boostTCPIOStream.read(&chCurValue, 1);
         strLine.append(1, chCurValue);
         if (chPreValue == '\r' && chCurValue == '\n')
@@ -385,13 +413,14 @@ bool CFlyRedisSession::ReadUntilCRLF(std::string& strLine)
 // End of RedisSession function
 //////////////////////////////////////////////////////////////////////////
 // Begin of RedisClient
-
 #define CHECK_CUR_REDIS_SESSION() if (nullptr == m_pCurRedisSession) { CFlyRedis::Logger(FlyRedisLogLevel::Error, "CurRedisSessionIsNull"); m_bHasBadRedisSession = true; return false; }
 
 CFlyRedisClient::CFlyRedisClient()
     :m_bClusterFlag(false),
+    m_nFlyRedisReadWriteType(FlyRedisReadWriteType::ReadWriteOnMaster),
+    m_nReadTimeOutSeconds(5),
     m_pCurRedisSession(nullptr),
-    m_nMasterNodeCount(0),
+    m_nRedisNodeCount(0),
     m_bHasBadRedisSession(false)
 {
 }
@@ -405,6 +434,16 @@ void CFlyRedisClient::SetRedisConfig(const std::string& strRedisAddress, const s
 {
     m_setRedisAddressSeed.insert(strRedisAddress);
     m_strRedisPasswod = strPassword;
+}
+
+void CFlyRedisClient::SetFlyRedisReadWriteType(FlyRedisReadWriteType nFlyRedisReadWriteType)
+{
+    m_nFlyRedisReadWriteType = nFlyRedisReadWriteType;
+}
+
+void CFlyRedisClient::SetRedisReadTimeOutSeconds(int nSeconds)
+{
+    m_nReadTimeOutSeconds = nSeconds;
 }
 
 bool CFlyRedisClient::Open()
@@ -422,7 +461,7 @@ bool CFlyRedisClient::Open()
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "No RedisNode Is Reachable");
         return false;
     }
-    m_nMasterNodeCount = 1;
+    m_nRedisNodeCount = 1;
     if (!m_pCurRedisSession->INFO_CLUSTER(m_bClusterFlag))
     {
         return true;
@@ -431,7 +470,7 @@ bool CFlyRedisClient::Open()
     {
         return true;
     }
-    return ConnectToEveryMasterRedisNode();
+    return ConnectToEveryRedisNode();
 }
 
 void CFlyRedisClient::Close()
@@ -444,7 +483,7 @@ void CFlyRedisClient::Close()
     }
     m_pCurRedisSession = nullptr;
     m_mapRedisSession.clear();
-    m_nMasterNodeCount = 0;
+    m_nRedisNodeCount = 0;
     m_bHasBadRedisSession = false;
 }
 
@@ -454,7 +493,7 @@ bool CFlyRedisClient::APPEND(const std::string& strKey, const std::string& strVa
     m_vecRedisCmdParamList.push_back("APPEND");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::BITCOUNT(const std::string& strKey, int& nResult)
@@ -462,7 +501,7 @@ bool CFlyRedisClient::BITCOUNT(const std::string& strKey, int& nResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("BITCOUNT");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::BITCOUNT(const std::string& strKey, int nStart, int nEnd, int& nResult)
@@ -472,7 +511,7 @@ bool CFlyRedisClient::BITCOUNT(const std::string& strKey, int nStart, int nEnd, 
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nStart));
     m_vecRedisCmdParamList.push_back(std::to_string(nEnd));
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::BITOP_AND(const std::string& strDestKey, const std::string& strSrcKey, int& nResult)
@@ -487,7 +526,7 @@ bool CFlyRedisClient::BITOP_AND(const std::string& strDestKey, const std::string
     m_vecRedisCmdParamList.push_back("AND");
     m_vecRedisCmdParamList.push_back(strDestKey);
     m_vecRedisCmdParamList.push_back(strSrcKey);
-    return RunRedisCmdOnOneLineResponseInt(strDestKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strDestKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::BITOP_OR(const std::string& strDestKey, const std::string& strSrcKey, int& nResult)
@@ -502,7 +541,7 @@ bool CFlyRedisClient::BITOP_OR(const std::string& strDestKey, const std::string&
     m_vecRedisCmdParamList.push_back("OR");
     m_vecRedisCmdParamList.push_back(strDestKey);
     m_vecRedisCmdParamList.push_back(strSrcKey);
-    return RunRedisCmdOnOneLineResponseInt(strDestKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strDestKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::BITOP_XOR(const std::string& strDestKey, const std::string& strSrcKey, int& nResult)
@@ -517,7 +556,7 @@ bool CFlyRedisClient::BITOP_XOR(const std::string& strDestKey, const std::string
     m_vecRedisCmdParamList.push_back("XOR");
     m_vecRedisCmdParamList.push_back(strDestKey);
     m_vecRedisCmdParamList.push_back(strSrcKey);
-    return RunRedisCmdOnOneLineResponseInt(strDestKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strDestKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::BITOP_NOT(const std::string& strDestKey, const std::string& strSrcKey, int& nResult)
@@ -532,7 +571,7 @@ bool CFlyRedisClient::BITOP_NOT(const std::string& strDestKey, const std::string
     m_vecRedisCmdParamList.push_back("NOT");
     m_vecRedisCmdParamList.push_back(strDestKey);
     m_vecRedisCmdParamList.push_back(strSrcKey);
-    return RunRedisCmdOnOneLineResponseInt(strDestKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strDestKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::BITPOS(const std::string& strKey, int nBit, int& nResult)
@@ -541,7 +580,7 @@ bool CFlyRedisClient::BITPOS(const std::string& strKey, int nBit, int& nResult)
     m_vecRedisCmdParamList.push_back("BITPOS");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nBit));
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::BITPOS(const std::string& strKey, int nBit, int nStart, int nEnd, int& nResult)
@@ -552,7 +591,7 @@ bool CFlyRedisClient::BITPOS(const std::string& strKey, int nBit, int nStart, in
     m_vecRedisCmdParamList.push_back(std::to_string(nBit));
     m_vecRedisCmdParamList.push_back(std::to_string(nStart));
     m_vecRedisCmdParamList.push_back(std::to_string(nEnd));
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::DECR(const std::string& strKey, int& nResult)
@@ -560,7 +599,7 @@ bool CFlyRedisClient::DECR(const std::string& strKey, int& nResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("DECR");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::DECRBY(const std::string& strKey, int nDecrement, int& nResult)
@@ -569,7 +608,7 @@ bool CFlyRedisClient::DECRBY(const std::string& strKey, int nDecrement, int& nRe
     m_vecRedisCmdParamList.push_back("DECRBY");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nDecrement));
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::GET(const std::string& strKey, std::string& strResult)
@@ -577,7 +616,7 @@ bool CFlyRedisClient::GET(const std::string& strKey, std::string& strResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("GET");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, false, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::GETBIT(const std::string& strKey, int nOffset, int& nResult)
@@ -586,7 +625,7 @@ bool CFlyRedisClient::GETBIT(const std::string& strKey, int nOffset, int& nResul
     m_vecRedisCmdParamList.push_back("GETBIT");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nOffset));
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::GETRANGE(const std::string& strKey, int nStart, int nEnd, std::string& strResult)
@@ -596,7 +635,7 @@ bool CFlyRedisClient::GETRANGE(const std::string& strKey, int nStart, int nEnd, 
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nStart));
     m_vecRedisCmdParamList.push_back(std::to_string(nEnd));
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, false, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::GETSET(const std::string& strKey, const std::string& strValue, std::string& strResult)
@@ -605,7 +644,7 @@ bool CFlyRedisClient::GETSET(const std::string& strKey, const std::string& strVa
     m_vecRedisCmdParamList.push_back("GETSET");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, true, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::INCR(const std::string& strKey, int& nResult)
@@ -613,7 +652,7 @@ bool CFlyRedisClient::INCR(const std::string& strKey, int& nResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("INCR");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::INCRBY(const std::string& strKey, int nIncrement, int& nResult)
@@ -622,7 +661,7 @@ bool CFlyRedisClient::INCRBY(const std::string& strKey, int nIncrement, int& nRe
     m_vecRedisCmdParamList.push_back("INCRBY");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nIncrement));
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 
@@ -632,7 +671,7 @@ bool CFlyRedisClient::INCRBYFLOAT(const std::string& strKey, double fIncrement, 
     m_vecRedisCmdParamList.push_back("INCRBYFLOAT");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(fIncrement));
-    return RunRedisCmdOnOneLineResponseDouble(strKey, fResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseDouble(strKey, true, fResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::MGET(const std::vector<std::string>& vecKey, std::vector<std::string>& vecResult)
@@ -649,7 +688,7 @@ bool CFlyRedisClient::MGET(const std::vector<std::string>& vecKey, std::vector<s
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("MGET");
     m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecKey.begin(), vecKey.end());
-    if (!DeliverRedisCmd(vecKey.front(), __FUNCTION__))
+    if (!DeliverRedisCmd(vecKey.front(), false, __FUNCTION__))
     {
         return false;
     }
@@ -674,7 +713,7 @@ bool CFlyRedisClient::MSET(const std::map<std::string, std::string>& mapKeyValue
         m_vecRedisCmdParamList.push_back(kvp.second);
     }
     std::string strResult;
-    return RunRedisCmdOnOneLineResponseString(strFirstKey, strResult, __FUNCTION__) && strResult == "OK";
+    return RunRedisCmdOnOneLineResponseString(strFirstKey, true, strResult, __FUNCTION__) && strResult == "OK";
 }
 
 bool CFlyRedisClient::MSETNX(const std::map<std::string, std::string>& mapKeyValue, int& nResult)
@@ -693,7 +732,7 @@ bool CFlyRedisClient::MSETNX(const std::map<std::string, std::string>& mapKeyVal
         m_vecRedisCmdParamList.push_back(kvp.first);
         m_vecRedisCmdParamList.push_back(kvp.second);
     }
-    return RunRedisCmdOnOneLineResponseInt(strFirstKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strFirstKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::PSETEX(const std::string& strKey, int nTimeOutMS, const std::string& strValue, std::string& strResult)
@@ -703,7 +742,7 @@ bool CFlyRedisClient::PSETEX(const std::string& strKey, int nTimeOutMS, const st
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nTimeOutMS));
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, true, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::VerifyRedisSessionList()
@@ -714,7 +753,7 @@ bool CFlyRedisClient::VerifyRedisSessionList()
     }
     std::vector<CFlyRedisSession*> vBadSession;
     PingEveryRedisNode(vBadSession);
-    if (vBadSession.empty() && (int)m_mapRedisSession.size() == m_nMasterNodeCount)
+    if (vBadSession.empty() && (int)m_mapRedisSession.size() == m_nRedisNodeCount)
     {
         m_bHasBadRedisSession = false;
         return true;
@@ -754,7 +793,7 @@ bool CFlyRedisClient::EXISTS(const std::string& strKey, int& nResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("EXISTS");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::EXPIRE(const std::string& strKey, int nSeconds, int& nResult)
@@ -763,7 +802,7 @@ bool CFlyRedisClient::EXPIRE(const std::string& strKey, int nSeconds, int& nResu
     m_vecRedisCmdParamList.push_back("EXPIRE");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nSeconds));
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::EXPIREAT(const std::string& strKey, int nTimestamp, int& nResult)
@@ -772,7 +811,7 @@ bool CFlyRedisClient::EXPIREAT(const std::string& strKey, int nTimestamp, int& n
     m_vecRedisCmdParamList.push_back("EXPIREAT");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nTimestamp));
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::PERSIST(const std::string& strKey, int& nResult)
@@ -780,7 +819,7 @@ bool CFlyRedisClient::PERSIST(const std::string& strKey, int& nResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("PERSIST");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::PEXPIRE(const std::string& strKey, int nMS, int& nResult)
@@ -789,7 +828,7 @@ bool CFlyRedisClient::PEXPIRE(const std::string& strKey, int nMS, int& nResult)
     m_vecRedisCmdParamList.push_back("PEXPIRE");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nMS));
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::PEXPIREAT(const std::string& strKey, int nMS, int& nResult)
@@ -798,7 +837,7 @@ bool CFlyRedisClient::PEXPIREAT(const std::string& strKey, int nMS, int& nResult
     m_vecRedisCmdParamList.push_back("PEXPIREAT");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nMS));
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SET(const std::string& strKey, const std::string& strValue)
@@ -808,7 +847,7 @@ bool CFlyRedisClient::SET(const std::string& strKey, const std::string& strValue
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strValue);
     std::string strResult;
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__) && strResult.compare("OK") == 0;
+    return RunRedisCmdOnOneLineResponseString(strKey, true, strResult, __FUNCTION__) && strResult.compare("OK") == 0;
 }
 
 bool CFlyRedisClient::SETBIT(const std::string& strKey, int nOffset, int nValue, int& nResult)
@@ -823,7 +862,7 @@ bool CFlyRedisClient::SETBIT(const std::string& strKey, int nOffset, int nValue,
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nOffset));
     m_vecRedisCmdParamList.push_back(std::to_string(nValue));
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::DEL(const std::string& strKey, int& nResult)
@@ -831,7 +870,7 @@ bool CFlyRedisClient::DEL(const std::string& strKey, int& nResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("DEL");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::DUMP(const std::string& strKey, std::string& strResult)
@@ -839,7 +878,7 @@ bool CFlyRedisClient::DUMP(const std::string& strKey, std::string& strResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("DUMP");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, false, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::TTL(const std::string& strKey, int& nResult)
@@ -847,7 +886,7 @@ bool CFlyRedisClient::TTL(const std::string& strKey, int& nResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("TTL");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::PTTL(const std::string& strKey, int& nResult)
@@ -855,7 +894,7 @@ bool CFlyRedisClient::PTTL(const std::string& strKey, int& nResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("PTTL");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::RENAME(const std::string& strFromKey, const std::string& strToKey, std::string& strResult)
@@ -869,7 +908,7 @@ bool CFlyRedisClient::RENAME(const std::string& strFromKey, const std::string& s
     m_vecRedisCmdParamList.push_back("RENAME");
     m_vecRedisCmdParamList.push_back(strFromKey);
     m_vecRedisCmdParamList.push_back(strToKey);
-    return RunRedisCmdOnOneLineResponseString(strFromKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strFromKey, true, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::RENAMENX(const std::string& strFromKey, const std::string& strToKey, std::string& strResult)
@@ -883,7 +922,7 @@ bool CFlyRedisClient::RENAMENX(const std::string& strFromKey, const std::string&
     m_vecRedisCmdParamList.push_back("RENAMENX");
     m_vecRedisCmdParamList.push_back(strFromKey);
     m_vecRedisCmdParamList.push_back(strToKey);
-    return RunRedisCmdOnOneLineResponseString(strFromKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strFromKey, true, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::TOUCH(const std::string& strKey, int& nResult)
@@ -891,7 +930,7 @@ bool CFlyRedisClient::TOUCH(const std::string& strKey, int& nResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("TOUCH");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::TYPE(const std::string& strKey, std::string& strResult)
@@ -899,7 +938,7 @@ bool CFlyRedisClient::TYPE(const std::string& strKey, std::string& strResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("TYPE");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, false, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::UNLINK(const std::string& strKey, int& nResult)
@@ -907,7 +946,7 @@ bool CFlyRedisClient::UNLINK(const std::string& strKey, int& nResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("UNLINK");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SETEX(const std::string& strKey, int nTimeOutSeconds, const std::string& strValue, std::string& strResult)
@@ -917,7 +956,7 @@ bool CFlyRedisClient::SETEX(const std::string& strKey, int nTimeOutSeconds, cons
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nTimeOutSeconds));
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, true, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SETNX(const std::string& strKey, const std::string& strValue, int& nResult)
@@ -926,7 +965,7 @@ bool CFlyRedisClient::SETNX(const std::string& strKey, const std::string& strVal
     m_vecRedisCmdParamList.push_back("SETNX");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SETRANGE(const std::string& strKey, int nOffset, const std::string& strValue, int& nResult)
@@ -936,7 +975,7 @@ bool CFlyRedisClient::SETRANGE(const std::string& strKey, int nOffset, const std
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nOffset));
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::STRLEN(const std::string& strKey, int& nResult)
@@ -944,7 +983,7 @@ bool CFlyRedisClient::STRLEN(const std::string& strKey, int& nResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("STRLEN");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::HSET(const std::string& strKey, const std::string& strField, const std::string& strValue, int& nResult)
@@ -954,7 +993,7 @@ bool CFlyRedisClient::HSET(const std::string& strKey, const std::string& strFiel
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strField);
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::HSETNX(const std::string& strKey, const std::string& strField, const std::string& strValue, int& nResult)
@@ -964,7 +1003,7 @@ bool CFlyRedisClient::HSETNX(const std::string& strKey, const std::string& strFi
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strField);
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::HSTRLEN(const std::string& strKey, const std::string& strField, int& nResult)
@@ -973,7 +1012,7 @@ bool CFlyRedisClient::HSTRLEN(const std::string& strKey, const std::string& strF
     m_vecRedisCmdParamList.push_back("HSTRLEN");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strField);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::HVALS(const std::string& strKey, std::vector<std::string>& vecResult)
@@ -981,7 +1020,7 @@ bool CFlyRedisClient::HVALS(const std::string& strKey, std::vector<std::string>&
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("HVALS");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseVector(strKey, vecResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseVector(strKey, false, vecResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::HMSET(const std::string& strKey, const std::map<std::string, std::string>& mapFieldValue, std::string& strResult)
@@ -994,7 +1033,7 @@ bool CFlyRedisClient::HMSET(const std::string& strKey, const std::map<std::strin
         m_vecRedisCmdParamList.push_back(kvp.first);
         m_vecRedisCmdParamList.push_back(kvp.second);
     }
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, false, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::HMSET(const std::string& strKey, const std::string& strField, const std::string& strValue, std::string& strResult)
@@ -1004,7 +1043,7 @@ bool CFlyRedisClient::HMSET(const std::string& strKey, const std::string& strFie
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strField);
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, false, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::HGETALL(const std::string& strKey, std::map<std::string, std::string>& mapFieldValue)
@@ -1013,7 +1052,7 @@ bool CFlyRedisClient::HGETALL(const std::string& strKey, std::map<std::string, s
     mapFieldValue.clear();
     m_vecRedisCmdParamList.push_back("HGETALL");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnResponseKVP(strKey, mapFieldValue, __FUNCTION__);
+    return RunRedisCmdOnResponseKVP(strKey, false, mapFieldValue, __FUNCTION__);
 }
 
 bool CFlyRedisClient::HDEL(const std::string& strKey, const std::string& strField, int& nResult)
@@ -1022,7 +1061,7 @@ bool CFlyRedisClient::HDEL(const std::string& strKey, const std::string& strFiel
     m_vecRedisCmdParamList.push_back("HDEL");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strField);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::HEXISTS(const std::string& strKey, const std::string& strField, int& nResult)
@@ -1031,7 +1070,7 @@ bool CFlyRedisClient::HEXISTS(const std::string& strKey, const std::string& strF
     m_vecRedisCmdParamList.push_back("HEXISTS");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strField);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::HGET(const std::string& strKey, const std::string& strField, std::string& strResult)
@@ -1040,7 +1079,7 @@ bool CFlyRedisClient::HGET(const std::string& strKey, const std::string& strFiel
     m_vecRedisCmdParamList.push_back("HGET");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strField);
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, false, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::HMGET(const std::string& strKey, const std::string& strField, std::string& strValue)
@@ -1049,7 +1088,7 @@ bool CFlyRedisClient::HMGET(const std::string& strKey, const std::string& strFie
     m_vecRedisCmdParamList.push_back("HMGET");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strField);
-    return RunRedisCmdOnOneLineResponseString(strKey, strValue, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, false, strValue, __FUNCTION__);
 }
 
 bool CFlyRedisClient::HMGET(const std::string& strKey, const std::vector<std::string>& vecField, std::vector<std::string>& vecOutput)
@@ -1058,7 +1097,7 @@ bool CFlyRedisClient::HMGET(const std::string& strKey, const std::vector<std::st
     m_vecRedisCmdParamList.push_back("HMGET");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecField.begin(), vecField.end());
-    return RunRedisCmdOnOneLineResponseVector(strKey, vecOutput, __FUNCTION__) && vecOutput.size() == vecField.size();
+    return RunRedisCmdOnOneLineResponseVector(strKey, false, vecOutput, __FUNCTION__) && vecOutput.size() == vecField.size();
 }
 
 bool CFlyRedisClient::HINCRBY(const std::string& strKey, const std::string& strField, int nIncVal, int& nResult)
@@ -1068,7 +1107,7 @@ bool CFlyRedisClient::HINCRBY(const std::string& strKey, const std::string& strF
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strField);
     m_vecRedisCmdParamList.push_back(std::to_string(nIncVal));
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::HINCRBYFLOAT(const std::string& strKey, const std::string& strField, double fIncVal, double& fResult)
@@ -1078,7 +1117,7 @@ bool CFlyRedisClient::HINCRBYFLOAT(const std::string& strKey, const std::string&
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strField);
     m_vecRedisCmdParamList.push_back(std::to_string(fIncVal));
-    return RunRedisCmdOnOneLineResponseDouble(strKey, fResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseDouble(strKey, true, fResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::HKEYS(const std::string& strKey, std::vector<std::string>& vecResult)
@@ -1086,7 +1125,7 @@ bool CFlyRedisClient::HKEYS(const std::string& strKey, std::vector<std::string>&
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("HKEYS");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseVector(strKey, vecResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseVector(strKey, false, vecResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::HLEN(const std::string& strKey, int& nResult)
@@ -1094,7 +1133,7 @@ bool CFlyRedisClient::HLEN(const std::string& strKey, int& nResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("HLEN");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::ZADD(const std::string& strKey, double fScore, const std::string& strMember, int& nResult)
@@ -1104,7 +1143,7 @@ bool CFlyRedisClient::ZADD(const std::string& strKey, double fScore, const std::
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(fScore));
     m_vecRedisCmdParamList.push_back(strMember);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::ZCARD(const std::string& strKey, int& nResult)
@@ -1112,7 +1151,7 @@ bool CFlyRedisClient::ZCARD(const std::string& strKey, int& nResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("ZCARD");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::ZCOUNT(const std::string& strKey, const std::string& strMin, const std::string& strMax, int& nResult)
@@ -1122,7 +1161,7 @@ bool CFlyRedisClient::ZCOUNT(const std::string& strKey, const std::string& strMi
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strMin);
     m_vecRedisCmdParamList.push_back(strMax);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::ZINCRBY(const std::string& strKey, double fIncrement, const std::string& strMember, std::string& strResult)
@@ -1132,7 +1171,7 @@ bool CFlyRedisClient::ZINCRBY(const std::string& strKey, double fIncrement, cons
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(fIncrement));
     m_vecRedisCmdParamList.push_back(strMember);
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, true, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::ZRANGE(const std::string& strKey, int nStart, int nStop, std::vector<std::string>& vecResult)
@@ -1142,7 +1181,7 @@ bool CFlyRedisClient::ZRANGE(const std::string& strKey, int nStart, int nStop, s
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nStart));
     m_vecRedisCmdParamList.push_back(std::to_string(nStop));
-    return RunRedisCmdOnOneLineResponseVector(strKey, vecResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseVector(strKey, false, vecResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::ZRANK(const std::string& strKey, const std::string& strMember, int& nResult)
@@ -1151,7 +1190,7 @@ bool CFlyRedisClient::ZRANK(const std::string& strKey, const std::string& strMem
     m_vecRedisCmdParamList.push_back("ZRANK");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strMember);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::ZREVRANGE_WITHSCORES(const std::string& strKey, int nStart, int nStop, std::vector<std::pair<std::string, double> >& vecResult)
@@ -1163,7 +1202,7 @@ bool CFlyRedisClient::ZREVRANGE_WITHSCORES(const std::string& strKey, int nStart
     m_vecRedisCmdParamList.push_back(std::to_string(nStop));
     m_vecRedisCmdParamList.push_back("WITHSCORES");
     std::vector< std::pair< std::string, std::string> > vecPairList;
-    if (!RunRedisCmdOnResponsePairList(strKey, vecPairList, __FUNCTION__))
+    if (!RunRedisCmdOnResponsePairList(strKey, false, vecPairList, __FUNCTION__))
     {
         return false;
     }
@@ -1183,7 +1222,7 @@ bool CFlyRedisClient::ZREMRANGEBYSCORE(const std::string& strKey, double fFromSc
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(fFromScore));
     m_vecRedisCmdParamList.push_back(std::to_string(fToScore));
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::ZRANGE_WITHSCORES(const std::string& strKey, int nStart, int nStop, std::vector<std::pair<std::string, double> >& vecResult)
@@ -1195,7 +1234,7 @@ bool CFlyRedisClient::ZRANGE_WITHSCORES(const std::string& strKey, int nStart, i
     m_vecRedisCmdParamList.push_back(std::to_string(nStop));
     m_vecRedisCmdParamList.push_back("WITHSCORES");
     std::vector< std::pair< std::string, std::string> > vecPairList;
-    if (!RunRedisCmdOnResponsePairList(strKey, vecPairList, __FUNCTION__))
+    if (!RunRedisCmdOnResponsePairList(strKey, false, vecPairList, __FUNCTION__))
     {
         return false;
     }
@@ -1215,7 +1254,7 @@ bool CFlyRedisClient::ZREVRANGE(const std::string& strKey, int nStart, int nStop
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nStart));
     m_vecRedisCmdParamList.push_back(std::to_string(nStop));
-    return RunRedisCmdOnOneLineResponseVector(strKey, vecResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseVector(strKey, false, vecResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::ZSCORE(const std::string& strKey, const std::string& strMember, double& fResult)
@@ -1224,7 +1263,7 @@ bool CFlyRedisClient::ZSCORE(const std::string& strKey, const std::string& strMe
     m_vecRedisCmdParamList.push_back("ZSCORE");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strMember);
-    return RunRedisCmdOnOneLineResponseDouble(strKey, fResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseDouble(strKey, false, fResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::BLPOP(const std::string& strKey, int nTimeout, std::vector<std::string>& vecResult)
@@ -1233,7 +1272,7 @@ bool CFlyRedisClient::BLPOP(const std::string& strKey, int nTimeout, std::vector
     m_vecRedisCmdParamList.push_back("BLPOP");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nTimeout));
-    return RunRedisCmdOnOneLineResponseVector(strKey, vecResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseVector(strKey, true, vecResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::BRPOP(const std::string& strKey, int nTimeout, std::vector<std::string>& vecResult)
@@ -1242,7 +1281,7 @@ bool CFlyRedisClient::BRPOP(const std::string& strKey, int nTimeout, std::vector
     m_vecRedisCmdParamList.push_back("BRPOP");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nTimeout));
-    return RunRedisCmdOnOneLineResponseVector(strKey, vecResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseVector(strKey, true, vecResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::BRPOPLPUSH(const std::string& strSrcKey, const std::string& strDstKey, int nTimeout, std::string& strResult)
@@ -1252,7 +1291,7 @@ bool CFlyRedisClient::BRPOPLPUSH(const std::string& strSrcKey, const std::string
     m_vecRedisCmdParamList.push_back(strSrcKey);
     m_vecRedisCmdParamList.push_back(strDstKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nTimeout));
-    return RunRedisCmdOnOneLineResponseString(strSrcKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strSrcKey, true, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::LINDEX(const std::string& strKey, int nIndex, std::string& strResult)
@@ -1261,7 +1300,7 @@ bool CFlyRedisClient::LINDEX(const std::string& strKey, int nIndex, std::string&
     m_vecRedisCmdParamList.push_back("LINDEX");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nIndex));
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, false, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::LINSERT_BEFORE(const std::string& strKey, const std::string& strPivot, const std::string& strValue, int& nResult)
@@ -1272,7 +1311,7 @@ bool CFlyRedisClient::LINSERT_BEFORE(const std::string& strKey, const std::strin
     m_vecRedisCmdParamList.push_back("BEFORE");
     m_vecRedisCmdParamList.push_back(strPivot);
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::LINSERT_AFTER(const std::string& strKey, const std::string& strPivot, const std::string& strValue, int& nResult)
@@ -1283,7 +1322,7 @@ bool CFlyRedisClient::LINSERT_AFTER(const std::string& strKey, const std::string
     m_vecRedisCmdParamList.push_back("AFTER");
     m_vecRedisCmdParamList.push_back(strPivot);
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::LLEN(const std::string& strKey, int& nResult)
@@ -1291,7 +1330,7 @@ bool CFlyRedisClient::LLEN(const std::string& strKey, int& nResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("LLEN");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::LPOP(const std::string& strKey, std::string& strResult)
@@ -1299,7 +1338,7 @@ bool CFlyRedisClient::LPOP(const std::string& strKey, std::string& strResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("LPOP");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, true, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::ZREM(const std::string& strKey, const std::string& strMember, int& nResult)
@@ -1308,7 +1347,7 @@ bool CFlyRedisClient::ZREM(const std::string& strKey, const std::string& strMemb
     m_vecRedisCmdParamList.push_back("ZREM");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strMember);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::LPUSH(const std::string& strKey, const std::string& strValue, int& nResult)
@@ -1317,7 +1356,7 @@ bool CFlyRedisClient::LPUSH(const std::string& strKey, const std::string& strVal
     m_vecRedisCmdParamList.push_back("LPUSH");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::LPUSHX(const std::string& strKey, const std::string& strValue, int& nResult)
@@ -1326,7 +1365,7 @@ bool CFlyRedisClient::LPUSHX(const std::string& strKey, const std::string& strVa
     m_vecRedisCmdParamList.push_back("LPUSHX");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::LRANGE(const std::string& strKey, int nStart, int nStop, std::vector<std::string>& vecResult)
@@ -1336,7 +1375,7 @@ bool CFlyRedisClient::LRANGE(const std::string& strKey, int nStart, int nStop, s
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nStart));
     m_vecRedisCmdParamList.push_back(std::to_string(nStop));
-    return RunRedisCmdOnOneLineResponseVector(strKey, vecResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseVector(strKey, false, vecResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::LREM(const std::string& strKey, int nCount, const std::string& strValue, int& nResult)
@@ -1346,7 +1385,7 @@ bool CFlyRedisClient::LREM(const std::string& strKey, int nCount, const std::str
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nCount));
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::LSET(const std::string& strKey, int nIndex, const std::string& strValue, std::string& strResult)
@@ -1356,7 +1395,7 @@ bool CFlyRedisClient::LSET(const std::string& strKey, int nIndex, const std::str
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nIndex));
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, true, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::LTRIM(const std::string& strKey, int nStart, int nStop, std::string& strResult)
@@ -1366,7 +1405,7 @@ bool CFlyRedisClient::LTRIM(const std::string& strKey, int nStart, int nStop, st
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nStart));
     m_vecRedisCmdParamList.push_back(std::to_string(nStop));
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, true, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::RPOP(const std::string& strKey, std::string& strResult)
@@ -1374,7 +1413,7 @@ bool CFlyRedisClient::RPOP(const std::string& strKey, std::string& strResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("RPOP");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseString(strKey, strResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseString(strKey, true, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::RPOPLPUSH(const std::string& strSrcKey, const std::string& strDestKey, std::vector<std::string>& vecResult)
@@ -1388,7 +1427,7 @@ bool CFlyRedisClient::RPOPLPUSH(const std::string& strSrcKey, const std::string&
     m_vecRedisCmdParamList.push_back("RPOPLPUSH");
     m_vecRedisCmdParamList.push_back(strSrcKey);
     m_vecRedisCmdParamList.push_back(strDestKey);
-    return RunRedisCmdOnOneLineResponseVector(strSrcKey, vecResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseVector(strSrcKey, true, vecResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::RPUSH(const std::string& strKey, const std::string& strValue, int& nResult)
@@ -1397,7 +1436,7 @@ bool CFlyRedisClient::RPUSH(const std::string& strKey, const std::string& strVal
     m_vecRedisCmdParamList.push_back("RPUSH");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::RPUSHX(const std::string& strKey, const std::string& strValue, int& nResult)
@@ -1406,7 +1445,7 @@ bool CFlyRedisClient::RPUSHX(const std::string& strKey, const std::string& strVa
     m_vecRedisCmdParamList.push_back("RPUSHX");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SADD(const std::string& strKey, const std::string& strValue, int& nResult)
@@ -1415,7 +1454,7 @@ bool CFlyRedisClient::SADD(const std::string& strKey, const std::string& strValu
     m_vecRedisCmdParamList.push_back("SADD");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SCARD(const std::string& strKey, int& nResult)
@@ -1423,7 +1462,7 @@ bool CFlyRedisClient::SCARD(const std::string& strKey, int& nResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("SCARD");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SDIFF(const std::string& strFirstKey, const std::string& strSecondKey, std::vector<std::string>& vecResult)
@@ -1437,7 +1476,7 @@ bool CFlyRedisClient::SDIFF(const std::string& strFirstKey, const std::string& s
     m_vecRedisCmdParamList.push_back("SDIFF");
     m_vecRedisCmdParamList.push_back(strFirstKey);
     m_vecRedisCmdParamList.push_back(strSecondKey);
-    return RunRedisCmdOnOneLineResponseVector(strFirstKey, vecResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseVector(strFirstKey, false, vecResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SDIFF(const std::vector<std::string>& vecKey, std::vector<std::string>& vecResult)
@@ -1454,7 +1493,7 @@ bool CFlyRedisClient::SDIFF(const std::vector<std::string>& vecKey, std::vector<
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("SDIFF");
     m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecKey.begin(), vecKey.end());
-    return RunRedisCmdOnOneLineResponseVector(vecKey.front(), vecResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseVector(vecKey.front(), false, vecResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SDIFFSTORE(const std::string& strDestKey, const std::vector<std::string>& vecSrcKey, int& nResult)
@@ -1468,7 +1507,7 @@ bool CFlyRedisClient::SDIFFSTORE(const std::string& strDestKey, const std::vecto
     m_vecRedisCmdParamList.push_back("SDIFFSTORE");
     m_vecRedisCmdParamList.push_back(strDestKey);
     m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecSrcKey.begin(), vecSrcKey.end());
-    return RunRedisCmdOnOneLineResponseInt(strDestKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strDestKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SINTER(const std::string& strFirstKey, const std::string& strSecondKey, std::vector<std::string>& vecResult)
@@ -1482,7 +1521,7 @@ bool CFlyRedisClient::SINTER(const std::string& strFirstKey, const std::string& 
     m_vecRedisCmdParamList.push_back("SINTER");
     m_vecRedisCmdParamList.push_back(strFirstKey);
     m_vecRedisCmdParamList.push_back(strSecondKey);
-    return RunRedisCmdOnOneLineResponseVector(strFirstKey, vecResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseVector(strFirstKey, false, vecResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SINTER(const std::vector<std::string>& vecKey, std::vector<std::string>& vecResult)
@@ -1499,7 +1538,7 @@ bool CFlyRedisClient::SINTER(const std::vector<std::string>& vecKey, std::vector
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("SINTER");
     m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecKey.begin(), vecKey.end());
-    return RunRedisCmdOnOneLineResponseVector(vecKey.front(), vecResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseVector(vecKey.front(), false, vecResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SINTERSTORE(const std::string& strDestKey, const std::vector<std::string>& vecSrcKey, int& nResult)
@@ -1513,7 +1552,7 @@ bool CFlyRedisClient::SINTERSTORE(const std::string& strDestKey, const std::vect
     m_vecRedisCmdParamList.push_back("SINTERSTORE");
     m_vecRedisCmdParamList.push_back(strDestKey);
     m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecSrcKey.begin(), vecSrcKey.end());
-    return RunRedisCmdOnOneLineResponseInt(strDestKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strDestKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SISMEMBER(const std::string& strKey, const std::string& strMember, int& nResult)
@@ -1522,7 +1561,7 @@ bool CFlyRedisClient::SISMEMBER(const std::string& strKey, const std::string& st
     m_vecRedisCmdParamList.push_back("SISMEMBER");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strMember);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SREM(const std::string& strKey, const std::string& strValue, int& nResult)
@@ -1531,7 +1570,7 @@ bool CFlyRedisClient::SREM(const std::string& strKey, const std::string& strValu
     m_vecRedisCmdParamList.push_back("SREM");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(strValue);
-    return RunRedisCmdOnOneLineResponseInt(strKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SUNION(const std::vector<std::string>& vecSrcKey, std::vector<std::string>& vecResult)
@@ -1548,7 +1587,7 @@ bool CFlyRedisClient::SUNION(const std::vector<std::string>& vecSrcKey, std::vec
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("SUNION");
     m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecSrcKey.begin(), vecSrcKey.end());
-    return RunRedisCmdOnOneLineResponseVector(vecSrcKey.front(), vecResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseVector(vecSrcKey.front(), false, vecResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SUNIONSTORE(const std::string& strDestKey, const std::vector<std::string>& vecSrcKey, int& nResult)
@@ -1562,7 +1601,7 @@ bool CFlyRedisClient::SUNIONSTORE(const std::string& strDestKey, const std::vect
     m_vecRedisCmdParamList.push_back("SUNIONSTORE");
     m_vecRedisCmdParamList.push_back(strDestKey);
     m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecSrcKey.begin(), vecSrcKey.end());
-    return RunRedisCmdOnOneLineResponseInt(strDestKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strDestKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SMEMBERS(const std::string& strKey, std::vector<std::string>& vecResult)
@@ -1570,7 +1609,7 @@ bool CFlyRedisClient::SMEMBERS(const std::string& strKey, std::vector<std::strin
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("SMEMBERS");
     m_vecRedisCmdParamList.push_back(strKey);
-    return RunRedisCmdOnOneLineResponseVector(strKey, vecResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseVector(strKey, false, vecResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SMOVE(const std::string& strSrcKey, const std::string& strDestKey, const std::string& strMember, int& nResult)
@@ -1585,7 +1624,7 @@ bool CFlyRedisClient::SMOVE(const std::string& strSrcKey, const std::string& str
     m_vecRedisCmdParamList.push_back(strSrcKey);
     m_vecRedisCmdParamList.push_back(strDestKey);
     m_vecRedisCmdParamList.push_back(strMember);
-    return RunRedisCmdOnOneLineResponseInt(strSrcKey, nResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseInt(strSrcKey, true, nResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SPOP(const std::string& strKey, int nCount, std::vector<std::string>& vecResult)
@@ -1594,7 +1633,7 @@ bool CFlyRedisClient::SPOP(const std::string& strKey, int nCount, std::vector<st
     m_vecRedisCmdParamList.push_back("SPOP");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nCount));
-    return RunRedisCmdOnOneLineResponseVector(strKey, vecResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseVector(strKey, true, vecResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SRANDMEMBER(const std::string& strKey, int nCount, std::vector<std::string>& vecResult)
@@ -1603,17 +1642,17 @@ bool CFlyRedisClient::SRANDMEMBER(const std::string& strKey, int nCount, std::ve
     m_vecRedisCmdParamList.push_back("SRANDMEMBER");
     m_vecRedisCmdParamList.push_back(strKey);
     m_vecRedisCmdParamList.push_back(std::to_string(nCount));
-    return RunRedisCmdOnOneLineResponseVector(strKey, vecResult, __FUNCTION__);
+    return RunRedisCmdOnOneLineResponseVector(strKey, false, vecResult, __FUNCTION__);
 }
 
-bool CFlyRedisClient::ResolveRedisSession(const std::string& strKey)
+bool CFlyRedisClient::ResolveRedisSession(const std::string& strKey, bool bIsWrite)
 {
     if (!m_bClusterFlag)
     {
         return m_pCurRedisSession != nullptr;
     }
     int nSlot = CFlyRedis::KeyHashSlot(strKey);
-    if (nullptr != m_pCurRedisSession && m_pCurRedisSession->AcceptHashSlot(nSlot))
+    if (nullptr != m_pCurRedisSession && m_pCurRedisSession->AcceptHashSlot(nSlot, bIsWrite, m_nFlyRedisReadWriteType))
     {
         return true;
     }
@@ -1621,90 +1660,111 @@ bool CFlyRedisClient::ResolveRedisSession(const std::string& strKey)
     for (auto& kvp : m_mapRedisSession)
     {
         CFlyRedisSession* pRedisSession = kvp.second;
-        if (nullptr != pRedisSession && pRedisSession->AcceptHashSlot(nSlot))
+        if (nullptr != pRedisSession && pRedisSession->AcceptHashSlot(nSlot, bIsWrite, m_nFlyRedisReadWriteType))
         {
             m_pCurRedisSession = pRedisSession;
             break;
         }
     }
+    if (nullptr == m_pCurRedisSession && m_nFlyRedisReadWriteType == FlyRedisReadWriteType::ReadOnSlaveWriteOnMaster && !bIsWrite)
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Warning, "SlaveFailedSoRedirToMaster: [%s]", strKey.c_str());
+        for (auto& kvp : m_mapRedisSession)
+        {
+            CFlyRedisSession* pRedisSession = kvp.second;
+            if (nullptr != pRedisSession && pRedisSession->AcceptHashSlot(nSlot, true, m_nFlyRedisReadWriteType))
+            {
+                m_pCurRedisSession = pRedisSession;
+                break;
+            }
+        }
+    }
     return (nullptr != m_pCurRedisSession);
 }
 
-bool CFlyRedisClient::ConnectToEveryMasterRedisNode()
+bool CFlyRedisClient::ConnectToEveryRedisNode()
 {
     if (nullptr == m_pCurRedisSession)
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "CurRedisSessionIsNull");
         return false;
     }
-    std::vector<std::string> vClusterNodes;
-    if (!m_pCurRedisSession->CLUSTER_NODES(vClusterNodes))
+    std::vector<std::string> vecClusterNodes;
+    if (!m_pCurRedisSession->CLUSTER_NODES(vecClusterNodes))
     {
         return false;
     }
     bool bResult = true;
-    int nMasterNodeCount = 0;
-    for (const std::string& strNodeLine : vClusterNodes)
+    std::map<std::string, RedisClusterNodesLine> mapRedisClusterNodesLine;
+    for (const std::string& strNodeLine : vecClusterNodes)
     {
         if (strNodeLine.empty())
         {
             continue;
         }
-        std::vector<std::string> vecNodeField = CFlyRedis::SplitString(strNodeLine, ' ');
-        if (vecNodeField.size() < 2)
+        RedisClusterNodesLine stRedisClusterNodesLine;
+        if (!stRedisClusterNodesLine.ParseNodeLine(strNodeLine))
         {
-            CFlyRedis::Logger(FlyRedisLogLevel::Error, "NodeFieldCountInvalid: [%s]", strNodeLine.c_str());
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "NodeLineInvalid: [%s]", strNodeLine.c_str());
             bResult = false;
             break;
         }
-        std::string strNodeIPPort = vecNodeField[1];
-        size_t nPos = strNodeIPPort.find('@');
-        if (nPos != std::string::npos)
+        if (!mapRedisClusterNodesLine.insert(std::make_pair(stRedisClusterNodesLine.strNodeId, stRedisClusterNodesLine)).second)
         {
-            strNodeIPPort.erase(nPos, strNodeIPPort.length());
-        }
-        if (strNodeLine.find("fail") != std::string::npos)
-        {
-            CFlyRedis::Logger(FlyRedisLogLevel::Warning, "RedisNodeFailed: [%s]", strNodeIPPort.c_str());
-            DestroyRedisSession(strNodeIPPort);
-            continue;
-        }
-        m_setRedisAddressSeed.insert(strNodeIPPort);
-        if (strNodeLine.find("master") != std::string::npos)
-        {
-            ++nMasterNodeCount;
-            if (vecNodeField.size() != 9)
-            {
-                CFlyRedis::Logger(FlyRedisLogLevel::Error, "MasterNodeFieldInvalid: [%s]", strNodeLine.c_str());
-                bResult = false;
-                break;
-            }
-            CFlyRedisSession* pRedisSession = CreateRedisSession(strNodeIPPort);
-            if (nullptr == pRedisSession)
-            {
-                CFlyRedis::Logger(FlyRedisLogLevel::Error, "CreateRedisSession: [%s]", strNodeLine.c_str());
-                bResult = false;
-                break;
-            }
-            if (!pRedisSession->SetSelfSlotRange(vecNodeField[8]))
-            {
-                CFlyRedis::Logger(FlyRedisLogLevel::Error, "SetSelfSlotRange: [%s]", strNodeLine.c_str());
-                bResult = false;
-                break;
-            }
-            continue;
-        }
-        else if (strNodeLine.find("slave") != std::string::npos)
-        {
-            DestroyRedisSession(strNodeIPPort);
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "RedisNodeIdReduplicated: [%s]", strNodeLine.c_str());
+            bResult = false;
+            break;
         }
     }
-    if (0 == m_nMasterNodeCount)
+    if (!bResult)
     {
-        m_nMasterNodeCount = nMasterNodeCount;
-        CFlyRedis::Logger(FlyRedisLogLevel::Debug, "MasterNodeCount: [%d]", nMasterNodeCount);
+        return false;
+    }
+    m_nRedisNodeCount = static_cast<int>(mapRedisClusterNodesLine.size());
+    for (auto& kvp : mapRedisClusterNodesLine)
+    {
+        RedisClusterNodesLine& refRedisNode = kvp.second;
+        // Refresh min max slot first
+        if (!refRedisNode.bIsMaster)
+        {
+            // If read and write on master only, we should destroy redis session
+            if (FlyRedisReadWriteType::ReadWriteOnMaster == m_nFlyRedisReadWriteType)
+            {
+                DestroyRedisSession(refRedisNode.strNodeIPPort);
+                continue;
+            }
+            auto itFindMaster = mapRedisClusterNodesLine.find(refRedisNode.strMasterNodeId);
+            if (itFindMaster == mapRedisClusterNodesLine.end())
+            {
+                CFlyRedis::Logger(FlyRedisLogLevel::Error, "SlaveHasNoMaster: [%s]", kvp.first.c_str());
+                bResult = false;
+                break;
+            }
+            const RedisClusterNodesLine& refMasterNode = itFindMaster->second;
+            refRedisNode.nMinSlot = refMasterNode.nMinSlot;
+            refRedisNode.nMaxSlot = refMasterNode.nMaxSlot;
+        }
+        if (!ConnectToOneClusterNode(refRedisNode))
+        {
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "ConnectToClusterNodesLineFailed: [%s-%s]", kvp.first.c_str(), refRedisNode.strNodeIPPort.c_str());
+            bResult = false;
+            continue;
+        }
     }
     return bResult;
+}
+
+bool CFlyRedisClient::ConnectToOneClusterNode(const RedisClusterNodesLine& stRedisNode)
+{
+    CFlyRedisSession* pRedisSession = CreateRedisSession(stRedisNode.strNodeIPPort);
+    if (nullptr == pRedisSession)
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "CreateRedisSessionFailed: [%s]", stRedisNode.strNodeIPPort.c_str());
+        return false;
+    }
+    pRedisSession->SetSelfSlotRange(stRedisNode.nMinSlot, stRedisNode.nMaxSlot);
+    pRedisSession->SetMasterNodeFlag(stRedisNode.bIsMaster);
+    return true;
 }
 
 CFlyRedisSession* CFlyRedisClient::CreateRedisSession(const std::string& strRedisAddress)
@@ -1717,6 +1777,7 @@ CFlyRedisSession* CFlyRedisClient::CreateRedisSession(const std::string& strRedi
     }
     CFlyRedisSession* pRedisSession = new CFlyRedisSession();
     pRedisSession->SetRedisAddress(strRedisAddress);
+    pRedisSession->SetReadTimeOut(m_nReadTimeOutSeconds);
     if (!pRedisSession->Connect())
     {
         delete pRedisSession;
@@ -1724,6 +1785,12 @@ CFlyRedisSession* CFlyRedisClient::CreateRedisSession(const std::string& strRedi
         return nullptr;
     }
     if (!pRedisSession->AUTH(m_strRedisPasswod))
+    {
+        delete pRedisSession;
+        pRedisSession = nullptr;
+        return nullptr;
+    }
+    if (FlyRedisReadWriteType::ReadOnSlaveWriteOnMaster == m_nFlyRedisReadWriteType && !pRedisSession->READONLY())
     {
         delete pRedisSession;
         pRedisSession = nullptr;
@@ -1771,7 +1838,7 @@ void CFlyRedisClient::PingEveryRedisNode(std::vector<CFlyRedisSession*>& vecDead
     }
 }
 
-bool CFlyRedisClient::DeliverRedisCmd(const std::string& strKey, const char* pszCaller)
+bool CFlyRedisClient::DeliverRedisCmd(const std::string& strKey, bool bIsWrite, const char* pszCaller)
 {
     if (strKey.empty())
     {
@@ -1782,7 +1849,7 @@ bool CFlyRedisClient::DeliverRedisCmd(const std::string& strKey, const char* psz
     {
         VerifyRedisSessionList();
     }
-    if (!ResolveRedisSession(strKey))
+    if (!ResolveRedisSession(strKey, bIsWrite))
     {
         m_bHasBadRedisSession = true;
         return false;
@@ -1803,10 +1870,10 @@ bool CFlyRedisClient::DeliverRedisCmd(const std::string& strKey, const char* psz
     return true;
 }
 
-bool CFlyRedisClient::RunRedisCmdOnOneLineResponseInt(const std::string& strKey, int& nResult, const char* pszCaller)
+bool CFlyRedisClient::RunRedisCmdOnOneLineResponseInt(const std::string& strKey, bool bIsWrite, int& nResult, const char* pszCaller)
 {
     std::string strResult;
-    if (!RunRedisCmdOnOneLineResponseString(strKey, strResult, pszCaller))
+    if (!RunRedisCmdOnOneLineResponseString(strKey, bIsWrite, strResult, pszCaller))
     {
         return false;
     }
@@ -1814,10 +1881,10 @@ bool CFlyRedisClient::RunRedisCmdOnOneLineResponseInt(const std::string& strKey,
     return true;
 }
 
-bool CFlyRedisClient::RunRedisCmdOnOneLineResponseDouble(const std::string& strKey, double& fResult, const char* pszCaller)
+bool CFlyRedisClient::RunRedisCmdOnOneLineResponseDouble(const std::string& strKey, bool bIsWrite, double& fResult, const char* pszCaller)
 {
     std::string strResult;
-    if (!RunRedisCmdOnOneLineResponseString(strKey, strResult, pszCaller))
+    if (!RunRedisCmdOnOneLineResponseString(strKey, bIsWrite, strResult, pszCaller))
     {
         return false;
     }
@@ -1825,9 +1892,9 @@ bool CFlyRedisClient::RunRedisCmdOnOneLineResponseDouble(const std::string& strK
     return true;
 }
 
-bool CFlyRedisClient::RunRedisCmdOnOneLineResponseString(const std::string& strKey, std::string& strResult, const char* pszCaller)
+bool CFlyRedisClient::RunRedisCmdOnOneLineResponseString(const std::string& strKey, bool bIsWrite, std::string& strResult, const char* pszCaller)
 {
-    if (!DeliverRedisCmd(strKey, pszCaller))
+    if (!DeliverRedisCmd(strKey, bIsWrite, pszCaller))
     {
         return false;
     }
@@ -1842,9 +1909,9 @@ bool CFlyRedisClient::RunRedisCmdOnOneLineResponseString(const std::string& strK
     return true;
 }
 
-bool CFlyRedisClient::RunRedisCmdOnOneLineResponseVector(const std::string& strKey, std::vector<std::string>& vecResult, const char* pszCaller)
+bool CFlyRedisClient::RunRedisCmdOnOneLineResponseVector(const std::string& strKey, bool bIsWrite, std::vector<std::string>& vecResult, const char* pszCaller)
 {
-    if (!DeliverRedisCmd(strKey, pszCaller))
+    if (!DeliverRedisCmd(strKey, bIsWrite, pszCaller))
     {
         return false;
     }
@@ -1852,9 +1919,9 @@ bool CFlyRedisClient::RunRedisCmdOnOneLineResponseVector(const std::string& strK
     return true;
 }
 
-bool CFlyRedisClient::RunRedisCmdOnResponseKVP(const std::string& strKey, std::map<std::string, std::string>& mapResult, const char* pszCaller)
+bool CFlyRedisClient::RunRedisCmdOnResponseKVP(const std::string& strKey, bool bIsWrite, std::map<std::string, std::string>& mapResult, const char* pszCaller)
 {
-    if (!DeliverRedisCmd(strKey, pszCaller))
+    if (!DeliverRedisCmd(strKey, bIsWrite, pszCaller))
     {
         return false;
     }
@@ -1881,9 +1948,9 @@ bool CFlyRedisClient::RunRedisCmdOnResponseKVP(const std::string& strKey, std::m
     return bResult;
 }
 
-bool CFlyRedisClient::RunRedisCmdOnResponsePairList(const std::string& strKey, std::vector< std::pair<std::string, std::string> >& vecResult, const char* pszCaller)
+bool CFlyRedisClient::RunRedisCmdOnResponsePairList(const std::string& strKey, bool bIsWrite, std::vector< std::pair<std::string, std::string> >& vecResult, const char* pszCaller)
 {
-    if (!DeliverRedisCmd(strKey, pszCaller))
+    if (!DeliverRedisCmd(strKey, bIsWrite, pszCaller))
     {
         return false;
     }
@@ -1913,13 +1980,11 @@ void CFlyRedisClient::ClearRedisCmdCache()
 // End of RedisClient
 //////////////////////////////////////////////////////////////////////////
 // Begin of FlyRedis
-
 std::function<void(const char*)> CFlyRedis::ms_pfnLoggerDebug = nullptr;
 std::function<void(const char*)> CFlyRedis::ms_pfnLoggerNotice = nullptr;
 std::function<void(const char*)> CFlyRedis::ms_pfnLoggerWarning = nullptr;
 std::function<void(const char*)> CFlyRedis::ms_pfnLoggerError = nullptr;
 std::function<void(const char*)> CFlyRedis::ms_pfnLoggerPersistence = nullptr;
-int CFlyRedis::ms_nRedisReadTimeOutSeconds = 10;
 
 void CFlyRedis::SetLoggerHandler(FlyRedisLogLevel nLogLevel, std::function<void(const char*)> pfnLoggerHandler)
 {
@@ -2173,3 +2238,54 @@ void CFlyRedis::BuildRedisCmdRequest(const std::string& strRedisAddress, const s
 
 // End of FlyRedis
 //////////////////////////////////////////////////////////////////////////
+// Define Struct RedisClusterNodesLine
+CFlyRedisClient::RedisClusterNodesLine::RedisClusterNodesLine() 
+    :strNodeId(),
+    strNodeIPPort(),
+    bIsMaster(false),
+    strMasterNodeId(),
+    nMinSlot(0),
+    nMaxSlot(0)
+{
+
+}
+
+bool CFlyRedisClient::RedisClusterNodesLine::ParseNodeLine(const std::string& strNodeLine)
+{
+    bIsMaster = (strNodeLine.find("master") != std::string::npos);
+    std::vector<std::string> vecNodeField = CFlyRedis::SplitString(strNodeLine, ' ');
+    if ((bIsMaster && vecNodeField.size() != 9) || (!bIsMaster && vecNodeField.size() != 8))
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "NodeFieldInvalid: [%s]", strNodeLine.c_str());
+        return false;
+    }
+    strNodeId = vecNodeField[0];
+    strNodeIPPort = vecNodeField[1];
+    size_t nPos = strNodeIPPort.find('@');
+    if (nPos != std::string::npos)
+    {
+        strNodeIPPort.erase(nPos, strNodeIPPort.length());
+    }
+    if (bIsMaster)
+    {
+        const std::string& strSlotRange = vecNodeField[8];
+        std::vector<std::string> vecIntField = CFlyRedis::SplitString(strSlotRange, '-');
+        if (vecIntField.size() != 2)
+        {
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "InvalidFieldLen: [%s] Slot: [%s]", strNodeIPPort.c_str(), strSlotRange.c_str());
+            return false;
+        }
+        nMinSlot = atoi(vecIntField[0].c_str());
+        nMaxSlot = atoi(vecIntField[1].c_str());
+        if (nMinSlot > nMaxSlot)
+        {
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "InvalidSlotValue: [%s] Slot: [%s]", strNodeIPPort.c_str(), strSlotRange.c_str());
+            return false;
+        }
+    }
+    else
+    {
+        strMasterNodeId = vecNodeField[3];
+    }
+    return true;
+}

@@ -32,6 +32,14 @@
 #include <map>
 
 //////////////////////////////////////////////////////////////////////////
+// ReadWriteType, Default type is ReadWriteOnMaster
+enum class FlyRedisReadWriteType : int
+{
+    ReadWriteOnMaster = 1,
+    ReadOnSlaveWriteOnMaster = 2,
+};
+
+//////////////////////////////////////////////////////////////////////////
 // Define FlyRedisSession, Describe TCP session to one redis server node.
 class CFlyRedisSession
 {
@@ -45,6 +53,9 @@ public:
     // Set redis address
     void SetRedisAddress(const std::string& strAddress);
 
+    // Set read time out seconds
+    void SetReadTimeOut(int nSeconds);
+
     // Get redis address
     const std::string& GetRedisAddr() const;
 
@@ -52,13 +63,16 @@ public:
     bool Connect();
 
     // Return true if accept this slot
-    inline bool AcceptHashSlot(int nSlot) const
-    {
-        return nSlot >= m_nMinSlot && nSlot <= m_nMaxSlot;
-    }
+    bool AcceptHashSlot(int nSlot, bool bIsWrite, FlyRedisReadWriteType nFlyRedisReadWriteType) const;
 
     // Set self slot range
-    bool SetSelfSlotRange(const std::string& strSlotRange);
+    void SetSelfSlotRange(int nMinSlot, int nMaxSlot);
+
+    // Set master flag
+    inline void SetMasterNodeFlag(bool bFlag)
+    {
+        m_bIsMasterNode = bFlag;
+    }
 
     // Process redis cmd request
     bool ProcRedisRequest(const std::string& strRedisCmdRequest, std::vector<std::string>& vecRedisResponseLine);
@@ -67,6 +81,7 @@ public:
     /// Begin of RedisCmd
     bool AUTH(std::string& strPassword);
     bool PING();
+    bool READONLY();
     bool INFO_CLUSTER(bool& bClusterEnable);
     bool CLUSTER_NODES(std::vector<std::string>& vecResult);
     bool SCRIPT_LOAD(const std::string& strScript, std::string& strResult);
@@ -87,9 +102,11 @@ private:
 private:
     // RedisAddress, format: host:port
     std::string m_strRedisAddress;
+    int m_nReadTimeOutSeconds;
     // SlotRange
     int m_nMinSlot;
     int m_nMaxSlot;
+    bool m_bIsMasterNode;
     //////////////////////////////////////////////////////////////////////////
     // Network data member
     boost::asio::ip::tcp::iostream m_boostTCPIOStream;
@@ -111,6 +128,8 @@ public:
 
     // Set redis config, address as 127.0.0.1:6789
     void SetRedisConfig(const std::string& strRedisAddress, const std::string& strPassword);
+    void SetFlyRedisReadWriteType(FlyRedisReadWriteType nFlyRedisReadWriteType);
+    void SetRedisReadTimeOutSeconds(int nSeconds);
 
     // Open this client
     bool Open();
@@ -238,9 +257,22 @@ public:
 private:
     bool VerifyRedisSessionList();
 
-    bool ResolveRedisSession(const std::string& strKey);
+    bool ResolveRedisSession(const std::string& strKey, bool bIsWrite);
 
-    bool ConnectToEveryMasterRedisNode();
+    // Define RedisClusterNodesLine
+    typedef struct RedisClusterNodesLine
+    {
+        RedisClusterNodesLine();
+        bool ParseNodeLine(const std::string& strNodeLine);
+        std::string strNodeId;
+        std::string strNodeIPPort;
+        bool bIsMaster; // true: master, false: slave
+        std::string strMasterNodeId; // Only for slave node
+        int nMinSlot;
+        int nMaxSlot;
+    } RedisClusterNodesLine;
+    bool ConnectToEveryRedisNode();
+    bool ConnectToOneClusterNode(const RedisClusterNodesLine& stRedisNode);
 
     CFlyRedisSession* CreateRedisSession(const std::string& strRedisAddress);
 
@@ -250,13 +282,13 @@ private:
     void PingEveryRedisNode(std::vector<CFlyRedisSession*>& vecDeadRedisSession);
 
     // Run redis cmd
-    bool DeliverRedisCmd(const std::string& strKey, const char* pszCaller);
-    bool RunRedisCmdOnOneLineResponseInt(const std::string& strKey, int& nResult, const char* pszCaller);
-    bool RunRedisCmdOnOneLineResponseDouble(const std::string& strKey, double& fResult, const char* pszCaller);
-    bool RunRedisCmdOnOneLineResponseString(const std::string& strKey, std::string& strResult, const char* pszCaller);
-    bool RunRedisCmdOnOneLineResponseVector(const std::string& strKey, std::vector<std::string>& vecResult, const char* pszCaller);
-    bool RunRedisCmdOnResponseKVP(const std::string& strKey, std::map<std::string, std::string>& mapResult, const char* pszCaller);
-    bool RunRedisCmdOnResponsePairList(const std::string& strKey, std::vector< std::pair<std::string, std::string> >& vecResult, const char* pszCaller);
+    bool DeliverRedisCmd(const std::string& strKey, bool bIsWrite, const char* pszCaller);
+    bool RunRedisCmdOnOneLineResponseInt(const std::string& strKey, bool bIsWrite, int& nResult, const char* pszCaller);
+    bool RunRedisCmdOnOneLineResponseDouble(const std::string& strKey, bool bIsWrite, double& fResult, const char* pszCaller);
+    bool RunRedisCmdOnOneLineResponseString(const std::string& strKey, bool bIsWrite, std::string& strResult, const char* pszCaller);
+    bool RunRedisCmdOnOneLineResponseVector(const std::string& strKey, bool bIsWrite, std::vector<std::string>& vecResult, const char* pszCaller);
+    bool RunRedisCmdOnResponseKVP(const std::string& strKey, bool bIsWrite, std::map<std::string, std::string>& mapResult, const char* pszCaller);
+    bool RunRedisCmdOnResponsePairList(const std::string& strKey, bool bIsWrite, std::vector< std::pair<std::string, std::string> >& vecResult, const char* pszCaller);
 
     void ClearRedisCmdCache();
 
@@ -264,11 +296,13 @@ private:
     std::set<std::string> m_setRedisAddressSeed;
     std::string m_strRedisPasswod;
     bool m_bClusterFlag;
+    FlyRedisReadWriteType m_nFlyRedisReadWriteType;
+    int m_nReadTimeOutSeconds;
     CFlyRedisSession* m_pCurRedisSession;
     // Key: redis address, ip:port
     // Value: redis session
     std::map<std::string, CFlyRedisSession*> m_mapRedisSession;
-    int m_nMasterNodeCount;
+    int m_nRedisNodeCount;
     // Flag of need verify redis session list
     bool m_bHasBadRedisSession;
     //////////////////////////////////////////////////////////////////////////
@@ -311,18 +345,6 @@ public:
     // Util function split string
     static std::vector<std::string> SplitString(const std::string& strInput, char chDelim);
 
-    // Config function, GetRedisReadTimeOutSeconds
-    inline static int GetRedisReadTimeOutSeconds()
-    {
-        return ms_nRedisReadTimeOutSeconds;
-    }
-
-    // Config function SetRedisReadTimeOutSeconds
-    inline static void SetRedisReadTimeOutSeconds(int nValue)
-    {
-        ms_nRedisReadTimeOutSeconds = nValue;
-    }
-
     // Util function build RedisCmdRequest
     static void BuildRedisCmdRequest(const std::string& strRedisAddress, const std::vector<std::string>& vecRedisCmdParamList, std::string& strRedisCmdRequest);
 
@@ -339,7 +361,6 @@ private:
     static std::function<void(const char*)> ms_pfnLoggerWarning;
     static std::function<void(const char*)> ms_pfnLoggerError;
     static std::function<void(const char*)> ms_pfnLoggerPersistence;
-    static int ms_nRedisReadTimeOutSeconds;
 };
 
 #endif // _FLYREDIS_H_
