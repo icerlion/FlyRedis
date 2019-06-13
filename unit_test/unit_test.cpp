@@ -15,7 +15,8 @@ const std::string CONST_REDIS_PASSWORD = "123456";
 #define CREATE_REDIS_CLIENT() \
     CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Error, Logger); \
     CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Warning, Logger); \
-    /*CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Command, Logger);*/ \
+    CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Notice, Logger); \
+    CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Command, Logger); \
     CFlyRedisClient* pFlyRedisClient = new CFlyRedisClient(); \
     pFlyRedisClient->SetRedisConfig(CONST_REDIS_ADDR, CONST_REDIS_PASSWORD); \
     BOOST_CHECK(pFlyRedisClient->Open());
@@ -593,7 +594,6 @@ BOOST_AUTO_TEST_CASE(KEY_SET)
     BOOST_CHECK_EQUAL(vecResult.size(), 1);
 
     BOOST_CHECK(pFlyRedisClient->SREM(strKey3, strMember1, nResult));
-    BOOST_CHECK_EQUAL(nResult, 1);
 
     DESTROY_REDIS_CLIENT();
 }
