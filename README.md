@@ -31,7 +31,8 @@ Linux: {fly_redis_home}/sample/Makefile
 CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Notice, YourLoggerFunction);
 CFlyRedisClient hFlyRedisClient;
 hFlyRedisClient.SetRedisConfig(strRedisAddr, strPassword);
-// If you want split read and write, you can call CFlyRedisClient::SetFlyRedisReadWriteType, then the read command will be sent to slave only.
+// If you want split read and write, you can call CFlyRedisClient::SetFlyRedisReadWriteType, 
+// then the read command will be sent to slave only.
 // The default mode was FlyRedisReadWriteType::ReadWriteOnMaster
 hFlyRedisClient.SetFlyRedisReadWriteType(FlyRedisReadWriteType::ReadOnSlaveWriteOnMaster);
 hFlyRedisClient.Open();
