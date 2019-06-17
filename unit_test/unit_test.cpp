@@ -597,3 +597,24 @@ BOOST_AUTO_TEST_CASE(KEY_SET)
 
     DESTROY_REDIS_CLIENT();
 }
+
+
+BOOST_AUTO_TEST_CASE(SCRIPT)
+{
+    CREATE_REDIS_CLIENT();
+    std::string strResult;
+    std::string strLuaScript = "return math.random(1000)";
+    std::string strSHA;
+    BOOST_CHECK(pFlyRedisClient->SCRIPT_LOAD(strLuaScript, strSHA));
+    BOOST_CHECK(pFlyRedisClient->EVALSHA(strSHA, "a", strResult));
+    BOOST_CHECK(pFlyRedisClient->EVALSHA(strSHA, "b", strResult));
+    BOOST_CHECK(pFlyRedisClient->EVALSHA(strSHA, "c", strResult));
+    BOOST_CHECK(pFlyRedisClient->EVAL(strLuaScript, "a", strResult));
+    BOOST_CHECK(pFlyRedisClient->EVAL(strLuaScript, "b", strResult));
+    BOOST_CHECK(pFlyRedisClient->EVAL(strLuaScript, "c", strResult));
+    BOOST_CHECK(pFlyRedisClient->SCRIPT_EXISTS(strSHA));
+    BOOST_CHECK(pFlyRedisClient->SCRIPT_FLUSH());
+    BOOST_CHECK(!pFlyRedisClient->SCRIPT_EXISTS(strSHA + strSHA));
+
+    DESTROY_REDIS_CLIENT();
+}

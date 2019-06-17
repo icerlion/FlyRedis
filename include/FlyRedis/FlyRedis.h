@@ -85,6 +85,8 @@ public:
     bool INFO_CLUSTER(bool& bClusterEnable);
     bool CLUSTER_NODES(std::vector<std::string>& vecResult);
     bool SCRIPT_LOAD(const std::string& strScript, std::string& strResult);
+    bool SCRIPT_FLUSH();
+    bool SCRIPT_EXISTS(const std::string& strSHA);
     /// End of RedisCmd
     //////////////////////////////////////////////////////////////////////////
 private:
@@ -140,6 +142,8 @@ public:
     //////////////////////////////////////////////////////////////////////////
     /// Begin of RedisCmd
     bool SCRIPT_LOAD(const std::string& strScript, std::string& strResult);
+    bool SCRIPT_FLUSH();
+    bool SCRIPT_EXISTS(const std::string& strSHA);
     bool EVALSHA(const std::string& strSHA, const std::vector<std::string>& vecKey, const std::vector<std::string>& vecArgv, std::string& strResult);
     bool EVALSHA(const std::string& strSHA, const std::string& strKey, const std::string& strArgv, std::string& strResult);
     bool EVALSHA(const std::string& strSHA, const std::string& strKey, std::string& strResult);

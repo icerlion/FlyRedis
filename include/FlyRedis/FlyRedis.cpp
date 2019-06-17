@@ -248,6 +248,47 @@ bool CFlyRedisSession::SCRIPT_LOAD(const std::string& strScript, std::string& st
     return true;
 }
 
+bool CFlyRedisSession::SCRIPT_FLUSH()
+{
+    std::vector<std::string> vecRedisCmdParamList;
+    vecRedisCmdParamList.push_back("SCRIPT");
+    vecRedisCmdParamList.push_back("FLUSH");
+    std::string strRedisCmdRequest;
+    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest);
+    std::vector<std::string> vecRedisResponseLine;
+    if (!ProcRedisRequest(strRedisCmdRequest, vecRedisResponseLine))
+    {
+        return false;
+    }
+    if (1 != vecRedisResponseLine.size())
+    {
+        return false;
+    }
+    const std::string& strResult = vecRedisResponseLine[0];
+    return strResult.compare("OK") == 0;
+}
+
+bool CFlyRedisSession::SCRIPT_EXISTS(const std::string& strSHA)
+{
+    std::vector<std::string> vecRedisCmdParamList;
+    vecRedisCmdParamList.push_back("SCRIPT");
+    vecRedisCmdParamList.push_back("EXISTS");
+    vecRedisCmdParamList.push_back(strSHA);
+    std::string strRedisCmdRequest;
+    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest);
+    std::vector<std::string> vecRedisResponseLine;
+    if (!ProcRedisRequest(strRedisCmdRequest, vecRedisResponseLine))
+    {
+        return false;
+    }
+    if (1 != vecRedisResponseLine.size())
+    {
+        return false;
+    }
+    const std::string& strResult = vecRedisResponseLine[0];
+    return strResult.compare("1") == 0;
+}
+
 bool CFlyRedisSession::RecvRedisResponse(std::vector<std::string>& vecRedisResponseLine)
 {
     char chHead = 0;
@@ -782,6 +823,41 @@ bool CFlyRedisClient::SCRIPT_LOAD(const std::string& strScript, std::string& str
             if (!pRedisSession->SCRIPT_LOAD(strScript, strResult))
             {
                 bResult = false;
+            }
+        }
+    }
+    return bResult;
+}
+
+bool CFlyRedisClient::SCRIPT_FLUSH()
+{
+    bool bResult = true;
+    for (auto& kvp : m_mapRedisSession)
+    {
+        CFlyRedisSession* pRedisSession = kvp.second;
+        if (nullptr != pRedisSession)
+        {
+            if (!pRedisSession->SCRIPT_FLUSH())
+            {
+                bResult = false;
+            }
+        }
+    }
+    return bResult;
+}
+
+bool CFlyRedisClient::SCRIPT_EXISTS(const std::string& strSHA)
+{
+    bool bResult = true;
+    for (auto& kvp : m_mapRedisSession)
+    {
+        CFlyRedisSession* pRedisSession = kvp.second;
+        if (nullptr != pRedisSession)
+        {
+            if (!pRedisSession->SCRIPT_EXISTS(strSHA))
+            {
+                bResult = false;
+                break;
             }
         }
     }
