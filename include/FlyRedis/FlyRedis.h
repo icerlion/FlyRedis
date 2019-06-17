@@ -140,6 +140,12 @@ public:
     //////////////////////////////////////////////////////////////////////////
     /// Begin of RedisCmd
     bool SCRIPT_LOAD(const std::string& strScript, std::string& strResult);
+    bool EVALSHA(const std::string& strSHA, const std::vector<std::string>& vecKey, const std::vector<std::string>& vecArgv, std::string& strResult);
+    bool EVALSHA(const std::string& strSHA, const std::string& strKey, const std::string& strArgv, std::string& strResult);
+    bool EVALSHA(const std::string& strSHA, const std::string& strKey, std::string& strResult);
+    bool EVAL(const std::string& strScript, const std::vector<std::string>& vecKey, const std::vector<std::string>& vecArgv, std::string& strResult);
+    bool EVAL(const std::string& strScript, const std::string& strKey, const std::string& strArgv, std::string& strResult);
+    bool EVAL(const std::string& strScript, const std::string& strKey, std::string& strResult);
 
     bool APPEND(const std::string& strKey, const std::string& strValue, int& nResult);
     bool BITCOUNT(const std::string& strKey, int nStart, int nEnd, int& nResult);

@@ -788,6 +788,82 @@ bool CFlyRedisClient::SCRIPT_LOAD(const std::string& strScript, std::string& str
     return bResult;
 }
 
+bool CFlyRedisClient::EVALSHA(const std::string& strSHA, const std::vector<std::string>& vecKey, const std::vector<std::string>& vecArgv, std::string& strResult)
+{
+    ClearRedisCmdCache();
+    if (!CFlyRedis::IsMlutiKeyOnTheSameSlot(vecKey))
+    {
+        return false;
+    }
+    if (vecKey.empty())
+    {
+        return false;
+    }
+    const std::string& strKeySeed = vecKey.front();
+    m_vecRedisCmdParamList.push_back("EVALSHA");
+    m_vecRedisCmdParamList.push_back(strSHA);
+    m_vecRedisCmdParamList.push_back(std::to_string(vecKey.size()));
+    m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecKey.begin(), vecKey.end());
+    m_vecRedisCmdParamList.push_back(std::to_string(vecArgv.size()));
+    m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecArgv.begin(), vecArgv.end());
+    return RunRedisCmdOnOneLineResponseString(strKeySeed, true, strResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::EVALSHA(const std::string& strSHA, const std::string& strKey, const std::string& strArgv, std::string& strResult)
+{
+    std::vector<std::string> vecKey;
+    vecKey.push_back(strKey);
+    std::vector<std::string> vecArgv;
+    vecArgv.push_back(strArgv);
+    return EVALSHA(strSHA, vecKey, vecArgv, strResult);
+}
+
+bool CFlyRedisClient::EVALSHA(const std::string& strSHA, const std::string& strKey, std::string& strResult)
+{
+    std::vector<std::string> vecKey;
+    vecKey.push_back(strKey);
+    std::vector<std::string> vecArgv;
+    return EVALSHA(strSHA, vecKey, vecArgv, strResult);
+}
+
+bool CFlyRedisClient::EVAL(const std::string& strScript, const std::vector<std::string>& vecKey, const std::vector<std::string>& vecArgv, std::string& strResult)
+{
+    ClearRedisCmdCache();
+    if (!CFlyRedis::IsMlutiKeyOnTheSameSlot(vecKey))
+    {
+        return false;
+    }
+    if (vecKey.empty())
+    {
+        return false;
+    }
+    const std::string& strKeySeed = vecKey.front();
+    m_vecRedisCmdParamList.push_back("EVAL");
+    m_vecRedisCmdParamList.push_back(strScript);
+    m_vecRedisCmdParamList.push_back(std::to_string(vecKey.size()));
+    m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecKey.begin(), vecKey.end());
+    m_vecRedisCmdParamList.push_back(std::to_string(vecArgv.size()));
+    m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecArgv.begin(), vecArgv.end());
+    return RunRedisCmdOnOneLineResponseString(strKeySeed, true, strResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::EVAL(const std::string& strScript, const std::string& strKey, const std::string& strArgv, std::string& strResult)
+{
+    std::vector<std::string> vecKey;
+    vecKey.push_back(strKey);
+    std::vector<std::string> vecArgv;
+    vecArgv.push_back(strArgv);
+    return EVAL(strScript, vecKey, vecArgv, strResult);
+}
+
+bool CFlyRedisClient::EVAL(const std::string& strScript, const std::string& strKey, std::string& strResult)
+{
+    std::vector<std::string> vecKey;
+    vecKey.push_back(strKey);
+    std::vector<std::string> vecArgv;
+    return EVAL(strScript, vecKey, vecArgv, strResult);
+}
+
 bool CFlyRedisClient::EXISTS(const std::string& strKey, int& nResult)
 {
     ClearRedisCmdCache();
