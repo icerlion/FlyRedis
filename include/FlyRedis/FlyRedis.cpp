@@ -195,6 +195,7 @@ bool CFlyRedisSession::INFO_CLUSTER(bool& bClusterEnable)
     }
     if (1 != vecRedisResponseLine.size())
     {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "INFO_CLUSTER Resp Too Much Line");
         return false;
     }
     const std::string& strResponse = vecRedisResponseLine[0];
@@ -458,6 +459,7 @@ bool CFlyRedisSession::ReadUntilCRLF(std::string& strLine)
 
 CFlyRedisClient::CFlyRedisClient()
     :m_bClusterFlag(false),
+    m_nFlyRedisClusterDetectType(FlyRedisClusterDetectType::AutoDetect),
     m_nFlyRedisReadWriteType(FlyRedisReadWriteType::ReadWriteOnMaster),
     m_nReadTimeOutSeconds(5),
     m_pCurRedisSession(nullptr),
@@ -477,7 +479,7 @@ void CFlyRedisClient::SetRedisConfig(const std::string& strRedisAddress, const s
     m_strRedisPasswod = strPassword;
 }
 
-void CFlyRedisClient::SetFlyRedisReadWriteType(FlyRedisReadWriteType nFlyRedisReadWriteType)
+void CFlyRedisClient::SetRedisReadWriteType(FlyRedisReadWriteType nFlyRedisReadWriteType)
 {
     m_nFlyRedisReadWriteType = nFlyRedisReadWriteType;
 }
@@ -485,6 +487,11 @@ void CFlyRedisClient::SetFlyRedisReadWriteType(FlyRedisReadWriteType nFlyRedisRe
 void CFlyRedisClient::SetRedisReadTimeOutSeconds(int nSeconds)
 {
     m_nReadTimeOutSeconds = nSeconds;
+}
+
+void CFlyRedisClient::SetRedisClusterDetectType(FlyRedisClusterDetectType nFlyRedisClusterDetectType)
+{
+    m_nFlyRedisClusterDetectType = nFlyRedisClusterDetectType;
 }
 
 bool CFlyRedisClient::Open()
@@ -503,9 +510,24 @@ bool CFlyRedisClient::Open()
         return false;
     }
     m_nRedisNodeCount = 1;
-    if (!m_pCurRedisSession->INFO_CLUSTER(m_bClusterFlag))
+    bool bResult = true;
+    switch (m_nFlyRedisClusterDetectType)
     {
-        return true;
+    case FlyRedisClusterDetectType::AutoDetect:
+        bResult = m_pCurRedisSession->INFO_CLUSTER(m_bClusterFlag); 
+        break;
+    case FlyRedisClusterDetectType::EnableCluster:
+        m_bClusterFlag = true;
+        break;
+    case FlyRedisClusterDetectType::DisableCluster:
+        m_bClusterFlag = false;
+        break;
+    default:
+        break;
+    }
+    if (!bResult)
+    {
+        return false;
     }
     if (!m_bClusterFlag)
     {

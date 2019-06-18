@@ -35,8 +35,15 @@
 // ReadWriteType, Default type is ReadWriteOnMaster
 enum class FlyRedisReadWriteType : int
 {
-    ReadWriteOnMaster = 1,
+    ReadWriteOnMaster = 1,  // Default
     ReadOnSlaveWriteOnMaster = 2,
+};
+
+enum class FlyRedisClusterDetectType : int
+{
+    AutoDetect = 1,         // Default
+    EnableCluster = 2,
+    DisableCluster = 3,
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -130,8 +137,9 @@ public:
 
     // Set redis config, address as 127.0.0.1:6789
     void SetRedisConfig(const std::string& strRedisAddress, const std::string& strPassword);
-    void SetFlyRedisReadWriteType(FlyRedisReadWriteType nFlyRedisReadWriteType);
+    void SetRedisReadWriteType(FlyRedisReadWriteType nFlyRedisReadWriteType);
     void SetRedisReadTimeOutSeconds(int nSeconds);
+    void SetRedisClusterDetectType(FlyRedisClusterDetectType nFlyRedisClusterDetectType);
 
     // Open this client
     bool Open();
@@ -306,6 +314,7 @@ private:
     std::set<std::string> m_setRedisAddressSeed;
     std::string m_strRedisPasswod;
     bool m_bClusterFlag;
+    FlyRedisClusterDetectType m_nFlyRedisClusterDetectType;
     FlyRedisReadWriteType m_nFlyRedisReadWriteType;
     int m_nReadTimeOutSeconds;
     CFlyRedisSession* m_pCurRedisSession;

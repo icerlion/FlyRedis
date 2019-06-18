@@ -11,12 +11,14 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword)
     CFlyRedisClient hFlyRedisClient;
     hFlyRedisClient.SetRedisConfig(strRedisAddr, strPassword);
     hFlyRedisClient.SetRedisReadTimeOutSeconds(10);
-    hFlyRedisClient.SetFlyRedisReadWriteType(FlyRedisReadWriteType::ReadWriteOnMaster);
+    hFlyRedisClient.SetRedisReadWriteType(FlyRedisReadWriteType::ReadWriteOnMaster);
+    //hFlyRedisClient.SetRedisClusterDetectType(FlyRedisClusterDetectType::DisableCluster);
     if (!hFlyRedisClient.Open())
     {
         return;
     }
     // You are free to run every redis cmd.
+    time_t nBeginTime = time(nullptr);
     std::string strResult;
     int nResult = 0;
     for (int i = 0; i < 10000; ++i)
@@ -38,6 +40,8 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword)
             continue;
         }
     }
+    time_t nElapsedTime = time(nullptr) - nBeginTime;
+    Logger(("TimeCost: " + std::to_string(nElapsedTime)).c_str());
 }
 
 int main(int argc, char* argv[])
