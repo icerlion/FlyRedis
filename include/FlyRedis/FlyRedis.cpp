@@ -1039,6 +1039,83 @@ bool CFlyRedisClient::SETBIT(const std::string& strKey, int nOffset, int nValue,
     return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
+bool CFlyRedisClient::SCAN(const std::string& strKey, int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("SCAN");
+    m_vecRedisCmdParamList.push_back(std::to_string(nCursor));
+    if (!strMatchPattern.empty())
+    {
+        m_vecRedisCmdParamList.push_back("MATCH");
+        m_vecRedisCmdParamList.push_back(strMatchPattern);
+    }
+    if (0 != nCount)
+    {
+        m_vecRedisCmdParamList.push_back("COUNT");
+        m_vecRedisCmdParamList.push_back(std::to_string(nCount));
+    }
+    return RunRedisCmdOnScanCmd(strKey, nResultCursor, vecResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::SSCAN(const std::string& strKey, int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("SSCAN");
+    m_vecRedisCmdParamList.push_back(strKey);
+    m_vecRedisCmdParamList.push_back(std::to_string(nCursor));
+    if (!strMatchPattern.empty())
+    {
+        m_vecRedisCmdParamList.push_back("MATCH");
+        m_vecRedisCmdParamList.push_back(strMatchPattern);
+    }
+    if (0 != nCount)
+    {
+        m_vecRedisCmdParamList.push_back("COUNT");
+        m_vecRedisCmdParamList.push_back(std::to_string(nCount));
+    }
+    return RunRedisCmdOnScanCmd(strKey, nResultCursor, vecResult, __FUNCTION__);
+}
+
+
+bool CFlyRedisClient::HSCAN(const std::string& strKey, int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("HSCAN");
+    m_vecRedisCmdParamList.push_back(strKey);
+    m_vecRedisCmdParamList.push_back(std::to_string(nCursor));
+    if (!strMatchPattern.empty())
+    {
+        m_vecRedisCmdParamList.push_back("MATCH");
+        m_vecRedisCmdParamList.push_back(strMatchPattern);
+    }
+    if (0 != nCount)
+    {
+        m_vecRedisCmdParamList.push_back("COUNT");
+        m_vecRedisCmdParamList.push_back(std::to_string(nCount));
+    }
+    return RunRedisCmdOnScanCmd(strKey, nResultCursor, vecResult, __FUNCTION__);
+}
+
+
+bool CFlyRedisClient::ZSCAN(const std::string& strKey, int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("ZSCAN");
+    m_vecRedisCmdParamList.push_back(strKey);
+    m_vecRedisCmdParamList.push_back(std::to_string(nCursor));
+    if (!strMatchPattern.empty())
+    {
+        m_vecRedisCmdParamList.push_back("MATCH");
+        m_vecRedisCmdParamList.push_back(strMatchPattern);
+    }
+    if (0 != nCount)
+    {
+        m_vecRedisCmdParamList.push_back("COUNT");
+        m_vecRedisCmdParamList.push_back(std::to_string(nCount));
+    }
+    return RunRedisCmdOnScanCmd(strKey, nResultCursor, vecResult, __FUNCTION__);
+}
+
 bool CFlyRedisClient::DEL(const std::string& strKey, int& nResult)
 {
     ClearRedisCmdCache();
@@ -2140,6 +2217,22 @@ bool CFlyRedisClient::RunRedisCmdOnResponsePairList(const std::string& strKey, b
         const std::string& strValue = m_vecRedisResponseLine[nValueIndex];
         vecResult.push_back(std::make_pair(strField, strValue));
     }
+    return true;
+}
+
+bool CFlyRedisClient::RunRedisCmdOnScanCmd(const std::string& strKey, int& nResultCursor, std::vector<std::string>& vecResult, const char* pszCaller)
+{
+    if (!DeliverRedisCmd(strKey, false, pszCaller))
+    {
+        return false;
+    }
+    if (m_vecRedisResponseLine.empty())
+    {
+        return false;
+    }
+    nResultCursor = atoi(m_vecRedisResponseLine.front().c_str());
+    m_vecRedisResponseLine.erase(m_vecRedisResponseLine.begin());
+    vecResult.swap(m_vecRedisResponseLine);
     return true;
 }
 
