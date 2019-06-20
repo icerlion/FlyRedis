@@ -89,7 +89,7 @@ bool CFlyRedisSession::Connect()
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "ConnectEndPointFailed, [%s]", m_strRedisAddress.c_str());
         return false;
     }
-    CFlyRedis::Logger(FlyRedisLogLevel::Notice, "ConnectToRedis: [%s]", m_strRedisAddress.c_str());
+    CFlyRedis::Logger(FlyRedisLogLevel::Notice, "FlyRedisConnectTo: [%s]", m_strRedisAddress.c_str());
     return true;
 }
 
