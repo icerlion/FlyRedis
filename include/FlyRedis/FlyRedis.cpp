@@ -837,6 +837,7 @@ bool CFlyRedisClient::VerifyRedisSessionList()
 bool CFlyRedisClient::SCRIPT_LOAD(const std::string& strScript, std::string& strResult)
 {
     bool bResult = true;
+    std::set<std::string> setSHA;
     for (auto& kvp : m_mapRedisSession)
     {
         CFlyRedisSession* pRedisSession = kvp.second;
@@ -845,6 +846,12 @@ bool CFlyRedisClient::SCRIPT_LOAD(const std::string& strScript, std::string& str
             if (!pRedisSession->SCRIPT_LOAD(strScript, strResult))
             {
                 bResult = false;
+            }
+            setSHA.insert(strResult);
+            if (setSHA.size() != 1)
+            {
+                bResult = false;
+                CFlyRedis::Logger(FlyRedisLogLevel::Error, "SameLuaScriptButDiffSHA");
             }
         }
     }
@@ -902,7 +909,6 @@ bool CFlyRedisClient::EVALSHA(const std::string& strSHA, const std::vector<std::
     m_vecRedisCmdParamList.push_back(strSHA);
     m_vecRedisCmdParamList.push_back(std::to_string(vecKey.size()));
     m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecKey.begin(), vecKey.end());
-    m_vecRedisCmdParamList.push_back(std::to_string(vecArgv.size()));
     m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecArgv.begin(), vecArgv.end());
     return RunRedisCmdOnOneLineResponseString(strKeySeed, true, strResult, __FUNCTION__);
 }
@@ -924,6 +930,13 @@ bool CFlyRedisClient::EVALSHA(const std::string& strSHA, const std::string& strK
     return EVALSHA(strSHA, vecKey, vecArgv, strResult);
 }
 
+bool CFlyRedisClient::EVALSHA(const std::string& strSHA, const std::string& strKey, const std::vector<std::string>& vecArgv, std::string& strResult)
+{
+    std::vector<std::string> vecKey;
+    vecKey.push_back(strKey);
+    return EVALSHA(strSHA, vecKey, vecArgv, strResult);
+}
+
 bool CFlyRedisClient::EVAL(const std::string& strScript, const std::vector<std::string>& vecKey, const std::vector<std::string>& vecArgv, std::string& strResult)
 {
     ClearRedisCmdCache();
@@ -940,7 +953,6 @@ bool CFlyRedisClient::EVAL(const std::string& strScript, const std::vector<std::
     m_vecRedisCmdParamList.push_back(strScript);
     m_vecRedisCmdParamList.push_back(std::to_string(vecKey.size()));
     m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecKey.begin(), vecKey.end());
-    m_vecRedisCmdParamList.push_back(std::to_string(vecArgv.size()));
     m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecArgv.begin(), vecArgv.end());
     return RunRedisCmdOnOneLineResponseString(strKeySeed, true, strResult, __FUNCTION__);
 }
