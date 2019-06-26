@@ -372,7 +372,7 @@ public:
     static std::vector<std::string> SplitString(const std::string& strInput, char chDelim);
 
     // Util function build RedisCmdRequest
-    static void BuildRedisCmdRequest(const std::string& strRedisAddress, const std::vector<std::string>& vecRedisCmdParamList, std::string& strRedisCmdRequest);
+    static void BuildRedisCmdRequest(const std::string& strRedisAddress, const std::vector<std::string>& vecRedisCmdParamList, std::string& strRedisCmdRequest, bool bIsWriteCmd);
 
 private:
     // Get logger handler by log level

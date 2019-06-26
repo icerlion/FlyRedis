@@ -89,7 +89,7 @@ bool CFlyRedisSession::Connect()
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "ConnectEndPointFailed, [%s]", m_strRedisAddress.c_str());
         return false;
     }
-    CFlyRedis::Logger(FlyRedisLogLevel::Notice, "FlyRedisConnectTo: [%s]", m_strRedisAddress.c_str());
+    CFlyRedis::Logger(FlyRedisLogLevel::Debug, "FlyRedisConnectTo: [%s]", m_strRedisAddress.c_str());
     return true;
 }
 
@@ -129,7 +129,7 @@ bool CFlyRedisSession::AUTH(std::string& strPassword)
     vecRedisCmdParamList.push_back("AUTH");
     vecRedisCmdParamList.push_back(strPassword);
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest);
+    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, false);
     std::vector<std::string> vecRedisResponseLine;
     if (!ProcRedisRequest(strRedisCmdRequest, vecRedisResponseLine))
     {
@@ -148,7 +148,7 @@ bool CFlyRedisSession::PING()
     std::vector<std::string> vecRedisCmdParamList;
     vecRedisCmdParamList.push_back("PING");
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest);
+    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, false);
     std::vector<std::string> vecRedisResponseLine;
     if (!ProcRedisRequest(strRedisCmdRequest, vecRedisResponseLine))
     {
@@ -167,7 +167,7 @@ bool CFlyRedisSession::READONLY()
     std::vector<std::string> vecRedisCmdParamList;
     vecRedisCmdParamList.push_back("READONLY");
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest);
+    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, false);
     std::vector<std::string> vecRedisResponseLine;
     if (!ProcRedisRequest(strRedisCmdRequest, vecRedisResponseLine))
     {
@@ -187,7 +187,7 @@ bool CFlyRedisSession::INFO_CLUSTER(bool& bClusterEnable)
     vecRedisCmdParamList.push_back("INFO");
     vecRedisCmdParamList.push_back("CLUSTER");
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest);
+    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, false);
     std::vector<std::string> vecRedisResponseLine;
     if (!ProcRedisRequest(strRedisCmdRequest, vecRedisResponseLine))
     {
@@ -214,7 +214,7 @@ bool CFlyRedisSession::CLUSTER_NODES(std::vector<std::string>& vecResult)
     vecRedisCmdParamList.push_back("CLUSTER");
     vecRedisCmdParamList.push_back("NODES");
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest);
+    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, false);
     std::vector<std::string> vecRedisResponseLine;
     if (!ProcRedisRequest(strRedisCmdRequest, vecRedisResponseLine))
     {
@@ -235,7 +235,7 @@ bool CFlyRedisSession::SCRIPT_LOAD(const std::string& strScript, std::string& st
     vecRedisCmdParamList.push_back("LOAD");
     vecRedisCmdParamList.push_back(strScript);
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest);
+    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, false);
     std::vector<std::string> vecRedisResponseLine;
     if (!ProcRedisRequest(strRedisCmdRequest, vecRedisResponseLine))
     {
@@ -255,7 +255,7 @@ bool CFlyRedisSession::SCRIPT_FLUSH()
     vecRedisCmdParamList.push_back("SCRIPT");
     vecRedisCmdParamList.push_back("FLUSH");
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest);
+    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, true);
     std::vector<std::string> vecRedisResponseLine;
     if (!ProcRedisRequest(strRedisCmdRequest, vecRedisResponseLine))
     {
@@ -276,7 +276,7 @@ bool CFlyRedisSession::SCRIPT_EXISTS(const std::string& strSHA)
     vecRedisCmdParamList.push_back("EXISTS");
     vecRedisCmdParamList.push_back(strSHA);
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest);
+    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, false);
     std::vector<std::string> vecRedisResponseLine;
     if (!ProcRedisRequest(strRedisCmdRequest, vecRedisResponseLine))
     {
@@ -2121,7 +2121,8 @@ bool CFlyRedisClient::DeliverRedisCmd(const std::string& strKey, bool bIsWrite, 
         m_bHasBadRedisSession = true;
         return false;
     }
-    CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr(), m_vecRedisCmdParamList, m_strRedisCmdRequest);
+    // Only write log for write cmd
+    CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr(), m_vecRedisCmdParamList, m_strRedisCmdRequest, bIsWrite);
     if (!m_pCurRedisSession->ProcRedisRequest(m_strRedisCmdRequest, m_vecRedisResponseLine))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "ProcRedisRequestFailed: [%s]", pszCaller);
@@ -2487,7 +2488,7 @@ std::vector<std::string> CFlyRedis::SplitString(const std::string& strInput, cha
     return vecResult;
 }
 
-void CFlyRedis::BuildRedisCmdRequest(const std::string& strRedisAddress, const std::vector<std::string>& vecRedisCmdParamList, std::string& strRedisCmdRequest)
+void CFlyRedis::BuildRedisCmdRequest(const std::string& strRedisAddress, const std::vector<std::string>& vecRedisCmdParamList, std::string& strRedisCmdRequest, bool bIsWriteCmd)
 {
     std::string strCmdLog;
     strRedisCmdRequest.clear();
@@ -2496,7 +2497,11 @@ void CFlyRedis::BuildRedisCmdRequest(const std::string& strRedisAddress, const s
     {
         strRedisCmdRequest.append("$").append(std::to_string((int)strParam.length())).append("\r\n");
         strRedisCmdRequest.append(strParam).append("\r\n");
-        if (strCmdLog.length() < 2048)
+        if (!bIsWriteCmd)
+        {
+            continue;
+        }
+        if (strCmdLog.length() < 4096)
         {
             strCmdLog.append(strParam).append(" ");
         }
@@ -2507,7 +2512,7 @@ void CFlyRedis::BuildRedisCmdRequest(const std::string& strRedisAddress, const s
             strCmdLog.append(strParam).append(" ");
         }
     }
-    if (!strCmdLog.empty())
+    if (bIsWriteCmd && !strCmdLog.empty())
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Command, "RedisCmd,%s,%s", strRedisAddress.c_str(), strCmdLog.c_str());
     }
