@@ -240,6 +240,13 @@ public:
     bool ZREVRANGE_WITHSCORES(const std::string& strKey, int nStart, int nStop, std::vector<std::pair<std::string, double> >& vecResult);
     bool ZSCORE(const std::string& strKey, const std::string& strMember, double& fResult);
 
+    bool PFADD(const std::string& strKey, const std::string& strElement, int& nResult);
+    bool PFADD(const std::string& strKey, const std::vector<std::string>& vecElements, int& nResult);
+    bool PFCOUNT(const std::string& strKey, int& nResult);
+    bool PFCOUNT(const std::vector<std::string>& vecKey, int& nResult);
+    bool PFMERGE(const std::string& strKey1, const std::string& strKey2, int& nResult);
+    bool PFMERGE(const std::vector<std::string>& vecKey, int& nResult);
+
     bool BLPOP(const std::string& strKey, int nTimeout, std::vector<std::string>& vecResult);
     bool BRPOP(const std::string& strKey, int nTimeout, std::vector<std::string>& vecResult);
     bool BRPOPLPUSH(const std::string& strSrcKey, const std::string& strDstKey, int nTimeout, std::string& strResult);
@@ -361,10 +368,10 @@ public:
     static void Logger(FlyRedisLogLevel nLevel, const char* pszMsgFormat, ...);
 
     // Calc the slot index
-    static bool IsMlutiKeyOnTheSameSlot(const std::string& strKeyFirst, const std::string& strKeySecond);
-    static bool IsMlutiKeyOnTheSameSlot(const std::vector<std::string>& vecKey);
-    static bool IsMlutiKeyOnTheSameSlot(const std::vector<std::string>& vecKey, const std::string& strMoreKey);
-    static bool IsMlutiKeyOnTheSameSlot(const std::map<std::string, std::string>& mapKeyValue);
+    static bool IsMlutiKeyOnTheSameNode(const std::string& strKeyFirst, const std::string& strKeySecond);
+    static bool IsMlutiKeyOnTheSameNode(const std::vector<std::string>& vecKey);
+    static bool IsMlutiKeyOnTheSameNode(const std::vector<std::string>& vecKey, const std::string& strMoreKey);
+    static bool IsMlutiKeyOnTheSameNode(const std::map<std::string, std::string>& mapKeyValue);
     static int KeyHashSlot(const std::string& strKey);
     static int KeyHashSlot(const char* pszKey, int nKeyLen);
 

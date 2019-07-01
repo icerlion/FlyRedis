@@ -743,7 +743,7 @@ bool CFlyRedisClient::MGET(const std::vector<std::string>& vecKey, std::vector<s
     {
         return false;
     }
-    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameSlot(vecKey))
+    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameNode(vecKey))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "CROSSSLOT Keys in request don't hash to the same slot");
         return false;
@@ -761,7 +761,7 @@ bool CFlyRedisClient::MGET(const std::vector<std::string>& vecKey, std::vector<s
 
 bool CFlyRedisClient::MSET(const std::map<std::string, std::string>& mapKeyValue)
 {
-    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameSlot(mapKeyValue))
+    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameNode(mapKeyValue))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "CROSSSLOT Keys in request don't hash to the same slot");
         return false;
@@ -781,7 +781,7 @@ bool CFlyRedisClient::MSET(const std::map<std::string, std::string>& mapKeyValue
 
 bool CFlyRedisClient::MSETNX(const std::map<std::string, std::string>& mapKeyValue, int& nResult)
 {
-    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameSlot(mapKeyValue))
+    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameNode(mapKeyValue))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "CROSSSLOT Keys in request don't hash to the same slot");
         return false;
@@ -896,7 +896,7 @@ bool CFlyRedisClient::SCRIPT_EXISTS(const std::string& strSHA)
 bool CFlyRedisClient::EVALSHA(const std::string& strSHA, const std::vector<std::string>& vecKey, const std::vector<std::string>& vecArgv, std::string& strResult)
 {
     ClearRedisCmdCache();
-    if (!CFlyRedis::IsMlutiKeyOnTheSameSlot(vecKey))
+    if (!CFlyRedis::IsMlutiKeyOnTheSameNode(vecKey))
     {
         return false;
     }
@@ -940,7 +940,7 @@ bool CFlyRedisClient::EVALSHA(const std::string& strSHA, const std::string& strK
 bool CFlyRedisClient::EVAL(const std::string& strScript, const std::vector<std::string>& vecKey, const std::vector<std::string>& vecArgv, std::string& strResult)
 {
     ClearRedisCmdCache();
-    if (!CFlyRedis::IsMlutiKeyOnTheSameSlot(vecKey))
+    if (!CFlyRedis::IsMlutiKeyOnTheSameNode(vecKey))
     {
         return false;
     }
@@ -1529,6 +1529,79 @@ bool CFlyRedisClient::ZSCORE(const std::string& strKey, const std::string& strMe
     return RunRedisCmdOnOneLineResponseDouble(strKey, false, fResult, __FUNCTION__);
 }
 
+bool CFlyRedisClient::PFADD(const std::string& strKey, const std::string& strElement, int& nResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("PFADD");
+    m_vecRedisCmdParamList.push_back(strKey);
+    m_vecRedisCmdParamList.push_back(strElement);
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::PFADD(const std::string& strKey, const std::vector<std::string>& vecElements, int& nResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("PFADD");
+    m_vecRedisCmdParamList.push_back(strKey);
+    m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecElements.begin(), vecElements.end());
+    return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::PFCOUNT(const std::string& strKey, int& nResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("PFCOUNT");
+    m_vecRedisCmdParamList.push_back(strKey);
+    return RunRedisCmdOnOneLineResponseInt(strKey, false, nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::PFCOUNT(const std::vector<std::string>& vecKey, int& nResult)
+{
+    if (vecKey.empty())
+    {
+        return false;
+    }
+    if (!CFlyRedis::IsMlutiKeyOnTheSameNode(vecKey))
+    {
+        return false;
+    }
+    const std::string& strSeedKey = vecKey.front();
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("PFCOUNT");
+    m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecKey.begin(), vecKey.end());
+    return RunRedisCmdOnOneLineResponseInt(strSeedKey, false, nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::PFMERGE(const std::vector<std::string>& vecKey, int& nResult)
+{
+    if (vecKey.empty())
+    {
+        return false;
+    }
+    if (!CFlyRedis::IsMlutiKeyOnTheSameNode(vecKey))
+    {
+        return false;
+    }
+    const std::string& strSeedKey = vecKey.front();
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("PFCOUNT");
+    m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecKey.begin(), vecKey.end());
+    return RunRedisCmdOnOneLineResponseInt(strSeedKey, true, nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::PFMERGE(const std::string& strKey1, const std::string& strKey2, int& nResult)
+{
+    if (!CFlyRedis::IsMlutiKeyOnTheSameNode(strKey1, strKey2))
+    {
+        return false;
+    }
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("PFCOUNT");
+    m_vecRedisCmdParamList.push_back(strKey1);
+    m_vecRedisCmdParamList.push_back(strKey2);
+    return RunRedisCmdOnOneLineResponseInt(strKey1, true, nResult, __FUNCTION__);
+}
+
 bool CFlyRedisClient::BLPOP(const std::string& strKey, int nTimeout, std::vector<std::string>& vecResult)
 {
     ClearRedisCmdCache();
@@ -1748,7 +1821,7 @@ bool CFlyRedisClient::SDIFF(const std::vector<std::string>& vecKey, std::vector<
     {
         return false;
     }
-    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameSlot(vecKey))
+    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameNode(vecKey))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "CROSSSLOT Keys in request don't hash to the same slot");
         return false;
@@ -1761,7 +1834,7 @@ bool CFlyRedisClient::SDIFF(const std::vector<std::string>& vecKey, std::vector<
 
 bool CFlyRedisClient::SDIFFSTORE(const std::string& strDestKey, const std::vector<std::string>& vecSrcKey, int& nResult)
 {
-    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameSlot(vecSrcKey, strDestKey))
+    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameNode(vecSrcKey, strDestKey))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "CROSSSLOT Keys in request don't hash to the same slot");
         return false;
@@ -1793,7 +1866,7 @@ bool CFlyRedisClient::SINTER(const std::vector<std::string>& vecKey, std::vector
     {
         return false;
     }
-    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameSlot(vecKey))
+    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameNode(vecKey))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "CROSSSLOT Keys in request don't hash to the same slot");
         return false;
@@ -1806,7 +1879,7 @@ bool CFlyRedisClient::SINTER(const std::vector<std::string>& vecKey, std::vector
 
 bool CFlyRedisClient::SINTERSTORE(const std::string& strDestKey, const std::vector<std::string>& vecSrcKey, int& nResult)
 {
-    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameSlot(vecSrcKey, strDestKey))
+    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameNode(vecSrcKey, strDestKey))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "CROSSSLOT Keys in request don't hash to the same slot");
         return false;
@@ -1842,7 +1915,7 @@ bool CFlyRedisClient::SUNION(const std::vector<std::string>& vecSrcKey, std::vec
     {
         return false;
     }
-    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameSlot(vecSrcKey))
+    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameNode(vecSrcKey))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "CROSSSLOT Keys in request don't hash to the same slot");
         return false;
@@ -1855,7 +1928,7 @@ bool CFlyRedisClient::SUNION(const std::vector<std::string>& vecSrcKey, std::vec
 
 bool CFlyRedisClient::SUNIONSTORE(const std::string& strDestKey, const std::vector<std::string>& vecSrcKey, int& nResult)
 {
-    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameSlot(vecSrcKey))
+    if (m_bClusterFlag && !CFlyRedis::IsMlutiKeyOnTheSameNode(vecSrcKey))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "CROSSSLOT Keys in request don't hash to the same slot");
         return false;
@@ -2374,12 +2447,12 @@ int CFlyRedis::CRC16(const char* buff, int nBuffLen)
     return nCRCValue;
 }
 
-bool CFlyRedis::IsMlutiKeyOnTheSameSlot(const std::string& strKeyFirst, const std::string& strKeySecond)
+bool CFlyRedis::IsMlutiKeyOnTheSameNode(const std::string& strKeyFirst, const std::string& strKeySecond)
 {
     return KeyHashSlot(strKeyFirst) == KeyHashSlot(strKeySecond);
 }
 
-bool CFlyRedis::IsMlutiKeyOnTheSameSlot(const std::vector<std::string>& vecKey)
+bool CFlyRedis::IsMlutiKeyOnTheSameNode(const std::vector<std::string>& vecKey)
 {
     std::set<int> setSlot;
     for (auto& strKey : vecKey)
@@ -2389,7 +2462,7 @@ bool CFlyRedis::IsMlutiKeyOnTheSameSlot(const std::vector<std::string>& vecKey)
     return setSlot.size() == 1;
 }
 
-bool CFlyRedis::IsMlutiKeyOnTheSameSlot(const std::map<std::string, std::string>& mapKeyValue)
+bool CFlyRedis::IsMlutiKeyOnTheSameNode(const std::map<std::string, std::string>& mapKeyValue)
 {
     std::set<int> setSlot;
     for (auto& kvp : mapKeyValue)
@@ -2399,7 +2472,7 @@ bool CFlyRedis::IsMlutiKeyOnTheSameSlot(const std::map<std::string, std::string>
     return setSlot.size() == 1;
 }
 
-bool CFlyRedis::IsMlutiKeyOnTheSameSlot(const std::vector<std::string>& vecKey, const std::string& strMoreKey)
+bool CFlyRedis::IsMlutiKeyOnTheSameNode(const std::vector<std::string>& vecKey, const std::string& strMoreKey)
 {
     std::set<int> setSlot;
     setSlot.insert(KeyHashSlot(strMoreKey));
