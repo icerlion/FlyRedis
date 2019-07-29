@@ -291,7 +291,7 @@ private:
     bool ResolveRedisSession(const std::string& strKey, bool bIsWrite);
 
     // Define RedisClusterNodesLine
-    typedef struct RedisClusterNodesLine
+    using RedisClusterNodesLine = struct RedisClusterNodesLine
     {
         RedisClusterNodesLine();
         bool ParseNodeLine(const std::string& strNodeLine);
@@ -301,7 +301,7 @@ private:
         std::string strMasterNodeId; // Only for slave node
         int nMinSlot;
         int nMaxSlot;
-    } RedisClusterNodesLine;
+    };
     bool ConnectToEveryRedisNode();
     bool ConnectToOneClusterNode(const RedisClusterNodesLine& stRedisNode);
 
