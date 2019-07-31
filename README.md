@@ -14,7 +14,7 @@ boost.asio
 ### How to use FlyRedis?
 
 *Option1: Use FlyRedis As Statistic library*  
-*Option2: ___Recommand___ Include source code in your project, which is {fly_redis_home}/include/FlyRedis/*, there only two filed, FlyRedis.h and FlyRedis.cpp  
+*Option2: ___Recommand___ Include source code in your project, which is {fly_redis_home}/include/FlyRedis/*, there only two files, FlyRedis.h and FlyRedis.cpp  
 
 ### How to build FlyRedis as Library?
 Windows: {fly_redis_home}/FlyRedis.vcxproj    
