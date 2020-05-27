@@ -1,6 +1,8 @@
 # FlyRedis
 C++ Redis Client, base on Boost.asio.
-This project depends on *boost_1_70_0*, and The RedisServer is *5.0+*. At the same time, you can try it with other version of boost and redis server.
+This project depends on *boost_1_72_0*, and The RedisServer is *5.0+*. At the same time, you can try it with other version of boost and redis server.
+
+RESP3 in FlyRedis is coming soon.
 
 [![Build Status](https://travis-ci.com/icerlion/FlyRedis.svg?branch=master)](https://travis-ci.com/icerlion/FlyRedis)
 [![license](https://img.shields.io/github/license/icerlion/FlyRedis.svg)](https://github.com/icerlion/FlyRedis/blob/master/LICENSE)
