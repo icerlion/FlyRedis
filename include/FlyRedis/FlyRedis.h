@@ -189,6 +189,7 @@ public:
     bool SETRANGE(const std::string& strKey, int nOffset, const std::string& strValue, int& nResult);
     bool STRLEN(const std::string& strKey, int& nValue);
 
+    bool SCAN(int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult);
     bool SCAN(const std::string& strKey, int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult);
     bool SSCAN(const std::string& strKey, int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult);
     bool HSCAN(const std::string& strKey, int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult);

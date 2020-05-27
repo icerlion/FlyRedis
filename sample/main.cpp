@@ -21,12 +21,13 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword)
     time_t nBeginTime = time(nullptr);
     std::string strResult;
     int nResult = 0;
+    std::vector<std::string> vecResult;
     for (int i = 0; i < 10000; ++i)
     {
         std::string strKey = "key_" + std::to_string(i);
         if (!hFlyRedisClient.SET(strKey, "value"))
         {
-            Logger("GET FAILED");
+            Logger("SET FAILED");
             continue;
         }
         if (!hFlyRedisClient.GET(strKey, strResult))
@@ -36,7 +37,17 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword)
         }
         if (!hFlyRedisClient.DEL(strKey, nResult))
         {
-            Logger("GET FAILED");
+            Logger("DEL FAILED");
+            continue;
+        }
+        if (!hFlyRedisClient.SCAN(0, "*", 10, nResult, vecResult))
+        {
+            Logger("SCAN FAILED");
+            continue;
+        }
+        if (!hFlyRedisClient.SCAN(strKey, 0, "*", 10, nResult, vecResult))
+        {
+            Logger("SCAN FAILED");
             continue;
         }
     }
@@ -46,14 +57,15 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword)
 
 int main(int argc, char* argv[])
 {
-    if (argc != 3)
+    if (argc != 4)
     {
-        // Param: 127.0.0.1:8000 123456
-        Logger("sample redis_ip:redis_port redis_password");
+        // Param: 127.0.0.1:8000 123456 1
+        Logger("sample redis_ip:redis_port redis_password thread_count");
         return -1;
     }
     std::string strRedisAddr = argv[1];
     std::string strPassword = argv[2];
+    int nThreadCount = atoi(argv[3]);
     // Config FlyRedis, but it's not not necessary
     //CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Debug, Logger);
     CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Notice, Logger);
@@ -61,7 +73,7 @@ int main(int argc, char* argv[])
     //CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Warning, Logger);
     //CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Command, Logger);
     boost::thread_group tg;
-    for (int i = 0; i < 10; ++i)
+    for (int i = 0; i < nThreadCount; ++i)
     {
         tg.create_thread(boost::bind(ThreadTestFlyRedis, strRedisAddr, strPassword));
     }

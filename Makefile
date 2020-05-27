@@ -8,7 +8,7 @@ Compiler_Flags=-O0 -Wall -ggdb -std=c++11
 # Include_Path
 Include_Path=\
 	-I"./include/" \
-	-I"./boost_1_70_0/" \
+	-I"./boost_1_72_0/" \
 
 Output_File=./publish/libFlyRedis.a
 

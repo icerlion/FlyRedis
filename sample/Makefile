@@ -21,7 +21,7 @@ Compiler_Flags=-O0 -Wall -ggdb -std=c++11
 # Library_Path
 Library_Path=\
 	-L"../publish/"\
-	-L"../boost_1_70_0/stage/lib/"
+	-L"../boost_1_72_0/stage/lib/"
 
 # Link_Library_Static
 Link_Library_Static=-Wl,-Bstatic -Wl,--start-group -lFlyRedis -lboost_thread -pthread -Wl,--end-group

@@ -1051,6 +1051,11 @@ bool CFlyRedisClient::SETBIT(const std::string& strKey, int nOffset, int nValue,
     return RunRedisCmdOnOneLineResponseInt(strKey, true, nResult, __FUNCTION__);
 }
 
+bool CFlyRedisClient::SCAN(int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult)
+{
+    return SCAN("", nCursor, strMatchPattern, nCount, nResultCursor, vecResult);
+}
+
 bool CFlyRedisClient::SCAN(const std::string& strKey, int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult)
 {
     ClearRedisCmdCache();
@@ -2174,11 +2179,6 @@ void CFlyRedisClient::PingEveryRedisNode(std::vector<CFlyRedisSession*>& vecDead
 
 bool CFlyRedisClient::DeliverRedisCmd(const std::string& strKey, bool bIsWrite, const char* pszCaller)
 {
-    if (strKey.empty())
-    {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "KeyIsEmpty: [%s]", pszCaller);
-        return false;
-    }
     if (m_bHasBadRedisSession)
     {
         VerifyRedisSessionList();
