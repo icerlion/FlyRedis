@@ -147,6 +147,12 @@ public:
     // Close this client
     void Close();
 
+    // Fetch redis node list
+    void FetchRedisNodeList(std::vector<std::string>& vecRedisNodeList) const;
+
+    // Chose current redis node
+    bool ChoseCurRedisNode(const std::string& strNodeAddr);
+
     //////////////////////////////////////////////////////////////////////////
     /// Begin of RedisCmd
     bool SCRIPT_LOAD(const std::string& strScript, std::string& strResult);
@@ -190,7 +196,6 @@ public:
     bool STRLEN(const std::string& strKey, int& nValue);
 
     bool SCAN(int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult);
-    bool SCAN(const std::string& strKey, int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult);
     bool SSCAN(const std::string& strKey, int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult);
     bool HSCAN(const std::string& strKey, int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult);
     bool ZSCAN(const std::string& strKey, int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult);

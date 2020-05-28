@@ -45,10 +45,15 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword)
             Logger("SCAN FAILED");
             continue;
         }
-        if (!hFlyRedisClient.SCAN(strKey, 0, "*", 10, nResult, vecResult))
+        std::vector<std::string> vecRedisNode;
+        hFlyRedisClient.FetchRedisNodeList(vecRedisNode);
+        for (auto& strNode : vecRedisNode)
         {
-            Logger("SCAN FAILED");
-            continue;
+            hFlyRedisClient.ChoseCurRedisNode(strNode);
+            if (!hFlyRedisClient.SCAN(0, "*", 10, nResult, vecResult))
+            {
+                Logger("SCAN FAILED");
+            }
         }
     }
     time_t nElapsedTime = time(nullptr) - nBeginTime;

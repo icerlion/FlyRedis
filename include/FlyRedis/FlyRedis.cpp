@@ -550,6 +550,26 @@ void CFlyRedisClient::Close()
     m_bHasBadRedisSession = false;
 }
 
+void CFlyRedisClient::FetchRedisNodeList(std::vector<std::string>& vecRedisNodeList) const
+{
+    vecRedisNodeList.reserve(m_mapRedisSession.size());
+    for (auto& kvp : m_mapRedisSession)
+    {
+        vecRedisNodeList.push_back(kvp.first);
+    }
+}
+
+bool CFlyRedisClient::ChoseCurRedisNode(const std::string& strNodeAddr)
+{
+    auto itFind = m_mapRedisSession.find(strNodeAddr);
+    if (itFind == m_mapRedisSession.end())
+    {
+        return false;
+    }
+    m_pCurRedisSession = itFind->second;
+    return true;
+}
+
 bool CFlyRedisClient::APPEND(const std::string& strKey, const std::string& strValue, int& nResult)
 {
     ClearRedisCmdCache();
@@ -1053,11 +1073,6 @@ bool CFlyRedisClient::SETBIT(const std::string& strKey, int nOffset, int nValue,
 
 bool CFlyRedisClient::SCAN(int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult)
 {
-    return SCAN("", nCursor, strMatchPattern, nCount, nResultCursor, vecResult);
-}
-
-bool CFlyRedisClient::SCAN(const std::string& strKey, int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult)
-{
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("SCAN");
     m_vecRedisCmdParamList.push_back(std::to_string(nCursor));
@@ -1071,7 +1086,7 @@ bool CFlyRedisClient::SCAN(const std::string& strKey, int nCursor, const std::st
         m_vecRedisCmdParamList.push_back("COUNT");
         m_vecRedisCmdParamList.push_back(std::to_string(nCount));
     }
-    return RunRedisCmdOnScanCmd(strKey, nResultCursor, vecResult, __FUNCTION__);
+    return RunRedisCmdOnScanCmd("", nResultCursor, vecResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::SSCAN(const std::string& strKey, int nCursor, const std::string& strMatchPattern, int nCount, int& nResultCursor, std::vector<std::string>& vecResult)
@@ -1988,7 +2003,7 @@ bool CFlyRedisClient::SRANDMEMBER(const std::string& strKey, int nCount, std::ve
 
 bool CFlyRedisClient::ResolveRedisSession(const std::string& strKey, bool bIsWrite)
 {
-    if (!m_bClusterFlag)
+    if (!m_bClusterFlag || strKey.empty())
     {
         return m_pCurRedisSession != nullptr;
     }
