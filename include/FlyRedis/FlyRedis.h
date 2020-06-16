@@ -48,6 +48,30 @@ enum class FlyRedisClusterDetectType : int
 
 //////////////////////////////////////////////////////////////////////////
 // Define FlyRedisSession, Describe TCP session to one redis server node.
+using RedisResponse = struct RedisResponse;
+struct RedisResponse
+{
+    RedisResponse()
+        :strRedisResponse(),
+        vecRedisResponse(),
+        mapRedisResponse(),
+        setRedisResponse()
+    {
+    }
+    inline void Reset()
+    {
+        strRedisResponse.clear();
+        vecRedisResponse.clear();
+        mapRedisResponse.clear();
+        setRedisResponse.clear();
+    }
+
+    std::string strRedisResponse;
+    std::vector<std::string> vecRedisResponse;
+    std::map<std::string, std::string> mapRedisResponse;
+    std::set<std::string> setRedisResponse;
+};
+
 class CFlyRedisSession
 {
 public:
@@ -82,31 +106,81 @@ public:
     }
 
     // Process redis cmd request
-    bool ProcRedisRequest(const std::string& strRedisCmdRequest, std::vector<std::string>& vecRedisResponseLine);
+    bool ProcRedisRequest(const std::string& strRedisCmdRequest);
+
+    // Return true if resolve server version success
+    bool ResolveServerVersion();
+
+    // Get RESP Version
+    inline int GetRESPVersion() const
+    {
+        return m_nRESPVersion;
+    }
+
+    // Return true if cluster enable
+    bool GetClusterEnabledFlag();
+
+    inline std::string& GetRedisResponseString()
+    {
+        return m_stRedisResponse.strRedisResponse;
+    }
+    inline std::vector<std::string>& GetRedisResponseVector()
+    {
+        return m_stRedisResponse.vecRedisResponse;
+    }
+    inline std::set<std::string>& GetRedisResponseSet()
+    {
+        return m_stRedisResponse.setRedisResponse;
+    }
+    inline std::map<std::string, std::string>& GetRedisResponseMap()
+    {
+        return m_stRedisResponse.mapRedisResponse;
+    }
 
     //////////////////////////////////////////////////////////////////////////
     /// Begin of RedisCmd
     bool AUTH(std::string& strPassword);
     bool PING();
     bool READONLY();
-    bool INFO_CLUSTER(bool& bClusterEnable);
+    bool INFO(const std::string& strSection, std::map<std::string, std::map<std::string, std::string> >& mapSectionInfo);
     bool CLUSTER_NODES(std::vector<std::string>& vecResult);
     bool SCRIPT_LOAD(const std::string& strScript, std::string& strResult);
     bool SCRIPT_FLUSH();
     bool SCRIPT_EXISTS(const std::string& strSHA);
+    bool HELLO(int nVersion);
+    bool HELLO_AUTH_SETNAME(int nVersion, const std::string& strUserName, const std::string& strPassword, const std::string& strClientName);
     /// End of RedisCmd
     //////////////////////////////////////////////////////////////////////////
+
 private:
     // Recv redis response
-    bool RecvRedisResponse(std::vector<std::string>& vecRedisResponseLine);
-    bool ReadRedisResponseError(std::vector<std::string>& vecRedisResponseLine);
-    bool ReadRedisResponseSimpleStrings(std::vector<std::string>& vecRedisResponseLine);
-    bool ReadRedisResponseIntegers(std::vector<std::string>& vecRedisResponseLine);
-    bool ReadRedisResponseBulkStrings(std::vector<std::string>& vecRedisResponseLine);
-    bool ReadRedisResponseArrays(std::vector<std::string>& vecRedisResponseLine);
+    bool RecvRedisResponse();
+    bool ReadRedisResponseError();
+    bool ReadRedisResponseSimpleStrings();
+    bool ReadRedisResponseIntegers();
+    bool ReadRedisResponseBulkStrings();
+    bool ReadRedisResponseArrays();
+    bool ReadRedisResponseMap();
+    bool ReadRedisResponseDouble();
+    bool ReadRedisResponseNull();
+    bool ReadRedisResponseBoolean();
+    bool ReadRedisResponseBlobError();
+    bool ReadRedisResponseVerbatimString();
+    bool ReadRedisResponseBigNumber();
+    bool ReadRedisResponseSet();
+    bool ReadRedisResponseAttribute();
+
+    // Return true if RedisServer Support this cmd
+    bool VerifyRedisServerVersion6(const char* pszCmdName) const;
 
     // Read one line from socket
-    bool ReadUntilCRLF(std::string& strLine);
+    bool ReadUntilCRLF();
+
+    bool ReadRedisResponseVarLenString();
+
+    std::string& TrimLastChar(std::string& strValue, size_t nTrimCount) const;
+
+    std::string GetServerInfoSectionField(const std::map<std::string, std::map<std::string, std::string> >& mapSectionInfo, const std::string& strSection, const std::string& strField);
 
 private:
     // RedisAddress, format: host:port
@@ -120,12 +194,19 @@ private:
     // Network data member
     boost::asio::ip::tcp::iostream m_boostTCPIOStream;
     // According the RESP document, the max length of BulkStrings was 512MB, you can changed the buff len
-    const static int CONST_BUFF_BULK_STRINGS_ONCE_LEN = 1024 * 32;
-    char m_buffBulkStrings[CONST_BUFF_BULK_STRINGS_ONCE_LEN];
+    const static int CONST_BUFF_READER_LEN = 1024 * 32;
+    char m_buffReader[CONST_BUFF_READER_LEN];
     bool m_bRedisResponseError;
+    //////////////////////////////////////////////////////////////////////////
+    std::string m_strRedisVersion;
+    // Resp Version, default version was RESP2, if the server was greater than V6.0, it will be switched to RESP3
+    int m_nRESPVersion;
+    //////////////////////////////////////////////////////////////////////////
+    // Last Response of this redis session
+    RedisResponse m_stRedisResponse;
 };
 //////////////////////////////////////////////////////////////////////////
-// Define RedisClient, Describt full connection to redis server, it will connect to every redis master node
+// Define RedisClient, Describe full connection to redis server, it will connect to every redis master node
 class CFlyRedisClient
 {
 public:
@@ -141,6 +222,12 @@ public:
     void SetRedisReadTimeOutSeconds(int nSeconds);
     void SetRedisClusterDetectType(FlyRedisClusterDetectType nFlyRedisClusterDetectType);
 
+    // Get ClusterFlag
+    inline bool GetClusterFlag() const
+    {
+        return m_bClusterFlag;
+    }
+
     // Open this client
     bool Open();
 
@@ -155,6 +242,32 @@ public:
 
     //////////////////////////////////////////////////////////////////////////
     /// Begin of RedisCmd
+    void HELLO(int nRESPVersion);
+    bool HELLO_AUTH_SETNAME(int nRESPVersion, const std::string& strUserName, const std::string& strPassword, const std::string& strClientName);
+
+    bool ACL_CAT(std::vector<std::string>& vecResult);
+    bool ACL_CAT(const std::string& strParam, std::vector<std::string>& vecResult);
+    bool ACL_DELUSER(const std::string& strUserName, int& nResult);
+    bool ACL_DELUSER(const std::vector<std::string>& vecUserName, int& nResult);
+    bool ACL_GENPASS(std::string& strResult);
+    bool ACL_GENPASS(int nBits, std::string& strResult);
+    bool ACL_GETUSER(const std::string& strUserName, std::vector<std::string>& vecResult);
+    bool ACL_HELP(std::vector<std::string>& vecResult);
+    bool ACL_LIST(std::vector<std::string>& vecResult);
+    bool ACL_LOAD();
+    bool ACL_LOG(std::vector<std::string>& vecResult);
+    bool ACL_SAVE();
+    bool ACL_SETUSER(const std::string& strUserName, const std::string& strRules, std::string& strResult);
+    bool ACL_USERS(std::vector<std::string>& vecResult);
+    bool ACL_WHOAMI(std::string& strResult);
+
+    bool LASTSAVE(int& nUTCTime);
+    bool TIME(int& nUnixTime, int& nMicroSeconds);
+    bool ROLE(std::vector<std::string>& vecResult);
+    bool DBSIZE(int& nResult);
+    bool KEYS(const std::string& strMatchPattern, std::vector<std::string>& vecResult);
+    bool SELECT(int nIndex);
+
     bool SCRIPT_LOAD(const std::string& strScript, std::string& strResult);
     bool SCRIPT_FLUSH();
     bool SCRIPT_EXISTS(const std::string& strSHA);
@@ -281,7 +394,7 @@ public:
     bool SINTER(const std::string& strFirstKey, const std::string& strSecondKey, std::vector<std::string>& vecResult);
     bool SINTERSTORE(const std::string& strDestKey, const std::vector<std::string>& vecSrcKey, int& nResult);
     bool SISMEMBER(const std::string& strKey, const std::string& strMember, int& nResult);
-    bool SMEMBERS(const std::string& strKey, std::vector<std::string>& vecResult);
+    bool SMEMBERS(const std::string& strKey, std::set<std::string>& setResult);
     bool SMOVE(const std::string& strSrcKey, const std::string& strDestKey, const std::string& strMember, int& nResult);
     bool SPOP(const std::string& strKey, int nCount, std::vector<std::string>& vecResult);
     bool SRANDMEMBER(const std::string& strKey, int nCount, std::vector<std::string>& vecResult);
@@ -325,6 +438,7 @@ private:
     bool RunRedisCmdOnOneLineResponseDouble(const std::string& strKey, bool bIsWrite, double& fResult, const char* pszCaller);
     bool RunRedisCmdOnOneLineResponseString(const std::string& strKey, bool bIsWrite, std::string& strResult, const char* pszCaller);
     bool RunRedisCmdOnOneLineResponseVector(const std::string& strKey, bool bIsWrite, std::vector<std::string>& vecResult, const char* pszCaller);
+    bool RunRedisCmdOnOneLineResponseSet(const std::string& strKey, bool bIsWrite, std::set<std::string>& setResult, const char* pszCaller);
     bool RunRedisCmdOnResponseKVP(const std::string& strKey, bool bIsWrite, std::map<std::string, std::string>& mapResult, const char* pszCaller);
     bool RunRedisCmdOnResponsePairList(const std::string& strKey, bool bIsWrite, std::vector< std::pair<std::string, std::string> >& vecResult, const char* pszCaller);
     bool RunRedisCmdOnScanCmd(const std::string& strKey, int& nResultCursor, std::vector<std::string>& vecResult, const char* pszCaller);
@@ -349,7 +463,6 @@ private:
     // Redis Request 
     std::vector<std::string> m_vecRedisCmdParamList;
     std::string m_strRedisCmdRequest;
-    std::vector<std::string> m_vecRedisResponseLine;
 };
 
 //////////////////////////////////////////////////////////////////////////

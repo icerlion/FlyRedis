@@ -9,8 +9,9 @@ void Logger(const char* pszLog)
     printf("%s\n", pszLog);
 }
 
-const std::string CONST_REDIS_ADDR = "127.0.0.1:1001";
+const std::string CONST_REDIS_ADDR = "127.0.0.1:1000";
 const std::string CONST_REDIS_PASSWORD = "123456";
+const int CONST_RESP_VER = 3; // RESP should be 2 or 3
 
 #define CREATE_REDIS_CLIENT() \
     CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Error, Logger); \
@@ -19,9 +20,30 @@ const std::string CONST_REDIS_PASSWORD = "123456";
     CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Command, Logger); \
     CFlyRedisClient* pFlyRedisClient = new CFlyRedisClient(); \
     pFlyRedisClient->SetRedisConfig(CONST_REDIS_ADDR, CONST_REDIS_PASSWORD); \
-    BOOST_CHECK(pFlyRedisClient->Open());
+    BOOST_CHECK(pFlyRedisClient->Open()); \
+    pFlyRedisClient->HELLO(CONST_RESP_VER);
 
 #define DESTROY_REDIS_CLIENT() delete pFlyRedisClient;
+
+BOOST_AUTO_TEST_CASE(MISC)
+{
+    CREATE_REDIS_CLIENT();
+    int nUnixTime = 0;
+    int nMicroSeconds = 0;
+    BOOST_CHECK(pFlyRedisClient->TIME(nUnixTime, nMicroSeconds));
+    BOOST_CHECK_GT(nUnixTime, 0);
+
+    int nResult = 0;
+    BOOST_CHECK(pFlyRedisClient->LASTSAVE(nResult));
+    BOOST_CHECK(pFlyRedisClient->DBSIZE(nResult));
+    std::vector<std::string> vecResult;
+    BOOST_CHECK(pFlyRedisClient->KEYS("*", vecResult));
+    if (!pFlyRedisClient->GetClusterFlag())
+    {
+        BOOST_CHECK(pFlyRedisClient->SELECT(1));
+    }
+    DESTROY_REDIS_CLIENT();
+}
 
 BOOST_AUTO_TEST_CASE(KEY_STRING)
 {
@@ -250,9 +272,9 @@ BOOST_AUTO_TEST_CASE(KEY_STRING_ERASE)
     BOOST_CHECK(pFlyRedisClient->EXPIREAT(strKey, static_cast<int>(time(nullptr) + 60), nResult));
     BOOST_CHECK_EQUAL(nResult, 1);
     BOOST_CHECK(pFlyRedisClient->TTL(strKey, nResult));
-    BOOST_CHECK_LE(nResult, 60);
+    BOOST_CHECK_GE(nResult, 60);
     BOOST_CHECK(pFlyRedisClient->PTTL(strKey, nResult));
-    BOOST_CHECK_LE(nResult, 60 * 1000);
+    BOOST_CHECK_GE(nResult, 60 * 1000);
 
     BOOST_CHECK(pFlyRedisClient->PEXPIRE(strKey, 10000, nResult));
     BOOST_CHECK_EQUAL(nResult, 1);
@@ -521,6 +543,7 @@ BOOST_AUTO_TEST_CASE(KEY_SET)
     int nResult = 0;
     std::string strResult;
     std::vector<std::string> vecResult;
+    std::set<std::string> setResult;
 
     BOOST_CHECK(pFlyRedisClient->DEL(strKey1, nResult));
     BOOST_CHECK(pFlyRedisClient->DEL(strKey2, nResult));
@@ -547,8 +570,8 @@ BOOST_AUTO_TEST_CASE(KEY_SET)
     BOOST_CHECK(pFlyRedisClient->SCARD(strKey1, nResult));
     BOOST_CHECK_EQUAL(nResult, 2);
 
-    BOOST_CHECK(pFlyRedisClient->SMEMBERS(strKey1, vecResult));
-    BOOST_CHECK_EQUAL(vecResult.size(), 2);
+    BOOST_CHECK(pFlyRedisClient->SMEMBERS(strKey1, setResult));
+    BOOST_CHECK_EQUAL(setResult.size(), 2);
 
     BOOST_CHECK(pFlyRedisClient->DEL(strKey1, nResult));
     BOOST_CHECK(pFlyRedisClient->DEL(strKey2, nResult));
@@ -598,7 +621,6 @@ BOOST_AUTO_TEST_CASE(KEY_SET)
     DESTROY_REDIS_CLIENT();
 }
 
-
 BOOST_AUTO_TEST_CASE(SCRIPT)
 {
     CREATE_REDIS_CLIENT();
@@ -615,6 +637,64 @@ BOOST_AUTO_TEST_CASE(SCRIPT)
     BOOST_CHECK(pFlyRedisClient->SCRIPT_EXISTS(strSHA));
     BOOST_CHECK(pFlyRedisClient->SCRIPT_FLUSH());
     BOOST_CHECK(!pFlyRedisClient->SCRIPT_EXISTS(strSHA + strSHA));
+    DESTROY_REDIS_CLIENT();
+}
+
+BOOST_AUTO_TEST_CASE(ACL_CMD)
+{
+    CREATE_REDIS_CLIENT();
+    std::vector<std::string> vecResult;
+    BOOST_CHECK(pFlyRedisClient->ACL_CAT(vecResult));
+    BOOST_CHECK(!vecResult.empty());
+    std::vector<std::string> vecSubResult;
+    for (auto& strCat : vecResult)
+    {
+        BOOST_CHECK(pFlyRedisClient->ACL_CAT(strCat, vecSubResult));
+        BOOST_CHECK(!vecSubResult.empty());
+    }
+    BOOST_CHECK(pFlyRedisClient->ACL_HELP(vecResult));
+    BOOST_CHECK(!vecResult.empty());
+
+    BOOST_CHECK(pFlyRedisClient->ACL_LIST(vecResult));
+    BOOST_CHECK(!vecResult.empty());
+
+    BOOST_CHECK(pFlyRedisClient->ACL_GETUSER("default", vecResult));
+    BOOST_CHECK(!vecResult.empty());
+
+    std::string strResult;
+    BOOST_CHECK(pFlyRedisClient->ACL_WHOAMI(strResult));
+    BOOST_CHECK(0 == strResult.compare("default"));
+
+    BOOST_CHECK(pFlyRedisClient->ACL_GENPASS(strResult));
+    BOOST_CHECK(!strResult.empty());
+
+    BOOST_CHECK(pFlyRedisClient->ACL_GENPASS(16, strResult));
+    BOOST_CHECK(!strResult.empty());
+
+    BOOST_CHECK(pFlyRedisClient->ACL_SETUSER("icerlion", "on allkeys +set", strResult));
+    BOOST_CHECK(!strResult.empty());
+
+    BOOST_CHECK(pFlyRedisClient->ACL_SETUSER("icerlion", "reset", strResult));
+    BOOST_CHECK(!strResult.empty());
+
+    BOOST_CHECK(pFlyRedisClient->ACL_SETUSER("icerlion", "+get", strResult));
+    BOOST_CHECK(!strResult.empty());
+
+    BOOST_CHECK(pFlyRedisClient->ACL_SETUSER("icerlion", "allkeys +@string +@set -SADD >password", strResult));
+    BOOST_CHECK(!strResult.empty());
+
+    BOOST_CHECK(pFlyRedisClient->ACL_USERS(vecResult));
+    BOOST_CHECK(!vecResult.empty());
+
+    int nResult = 0;
+    BOOST_CHECK(pFlyRedisClient->ACL_DELUSER("icerlion", nResult));
+    BOOST_CHECK(1 == nResult);
+
+    BOOST_CHECK(pFlyRedisClient->ACL_LOG(vecResult));
+
+    BOOST_CHECK(pFlyRedisClient->ACL_SAVE());
+
+    BOOST_CHECK(pFlyRedisClient->ACL_LOAD());
 
     DESTROY_REDIS_CLIENT();
 }
