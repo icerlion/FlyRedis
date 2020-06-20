@@ -69,29 +69,38 @@ bool CFlyRedisSession::Connect()
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "ParseIPFailed, [%s] Invalid AddressFormat", m_strRedisAddress.c_str());
         return false;
     }
-    const std::string& strIP = vecAddressField[0];
-    int nPort = atoi(vecAddressField[1].c_str());
-    // Parse ip address
     boost::system::error_code boostErrorCode;
-    boost::asio::ip::address boostIPAddress = boost::asio::ip::address::from_string(strIP, boostErrorCode);
+    //////////////////////////////////////////////////////////////////////////
+    const std::string& strHost = vecAddressField[0];
+    unsigned short nPort = static_cast<unsigned short>(atoi(vecAddressField[1].c_str()));
+    // Parse ip address
+    boost::asio::io_context boostIOContext;
+    boost::asio::ip::tcp::resolver boostResolver(boostIOContext);
+    boost::asio::ip::tcp::resolver::query boostQuery(strHost, "");
+    boost::asio::ip::tcp::resolver::iterator itEnd;
+    for (auto itCur = boostResolver.resolve(boostQuery, boostErrorCode); itCur != itEnd; ++itCur)
+    {
+        boost::asio::ip::tcp::endpoint boostCurEndPoint = *itCur;
+        boostCurEndPoint.port(nPort);
+        m_boostTCPIOStream.close();
+        m_boostTCPIOStream.connect(boostCurEndPoint);
+        if (m_boostTCPIOStream.good())
+        {
+            break;
+        }
+    }
     if (boostErrorCode)
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "ParseIPFailed, [%s], Msg: [%d-%s]", strIP.c_str(), boostErrorCode.value(), boostErrorCode.message().c_str());
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "ParseAddressFailed, [%s], Msg: [%d-%s]", m_strRedisAddress.c_str(), boostErrorCode.value(), boostErrorCode.message().c_str());
         return false;
     }
-    boost::asio::ip::tcp::endpoint boostEndPoint;
-    boostEndPoint.address(boostIPAddress);
-    boostEndPoint.port(static_cast<unsigned short>(nPort));
-    m_boostTCPIOStream.close();
-    // Connect To EndPoint
-    m_boostTCPIOStream.connect(boostEndPoint);
-    auto& refBooostSocket = m_boostTCPIOStream.socket();
-    refBooostSocket.set_option(boost::asio::socket_base::keep_alive());
     if (!m_boostTCPIOStream.good())
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "ConnectEndPointFailed, [%s]", m_strRedisAddress.c_str());
         return false;
     }
+    auto& refBooostSocket = m_boostTCPIOStream.socket();
+    refBooostSocket.set_option(boost::asio::socket_base::keep_alive());
     // Try to recv first error msg after connect to redis-server
     bool bResult = true;
     int nTryCount = 0;
