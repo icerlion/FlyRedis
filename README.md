@@ -4,6 +4,8 @@ This project depends on *boost_1_72_0*, and The RedisServer is *5.0+*. At the sa
 
 ## RESP3 IS READY NOW.
 
+## GOOS NEWS, TLS IS COMING SOON!
+
 [![Build Status](https://travis-ci.com/icerlion/FlyRedis.svg?branch=master)](https://travis-ci.com/icerlion/FlyRedis)
 [![license](https://img.shields.io/github/license/icerlion/FlyRedis.svg)](https://github.com/icerlion/FlyRedis/blob/master/LICENSE)
 
