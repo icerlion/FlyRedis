@@ -2,9 +2,9 @@
 C++ Redis Client, base on Boost.asio.
 This project depends on *boost_1_72_0*, and The RedisServer is *5.0+*. At the same time, you can try it with other version of boost and redis server.
 
-## RESP3 IS READY NOW.
+## TLS IS READY NOW! 2020-07-09
+## RESP3 IS READY NOW! 2020-06-20
 
-## GOOS NEWS, TLS IS COMING SOON!
 
 [![Build Status](https://travis-ci.com/icerlion/FlyRedis.svg?branch=master)](https://travis-ci.com/icerlion/FlyRedis)
 [![license](https://img.shields.io/github/license/icerlion/FlyRedis.svg)](https://github.com/icerlion/FlyRedis/blob/master/LICENSE)
@@ -50,3 +50,16 @@ hFlyRedisClient.DEL("key", nResult);
 ### Redis Command Support
 
 This project did not implement all Redis command, And I will add support in the further, at the same time, You can add implementation yourself, or you can send email to me, and I will add it in 7 days.
+
+### How To Enable SSL/TSL in FlyRedis
+
+First of all, you need to build redis with TLS open, ref： https://redis.io/topics/encryption 
+Then run redis-server witn TLS port opened.
+Add macro: FLY_REDIS_ENABLE_TLS to enable TLS in FlyRedis.
+```
+CFlyRedisClient* pFlyRedisClient = new CFlyRedisClient();
+pFlyRedisClient->SetTLSContext("redis.crt", "redis.key", "ca.crt");
+pFlyRedisClient->SetRedisConfig(CONFIG_REDIS_ADDR, CONFIG_REDIS_PASSWORD);
+pFlyRedisClient->Open();
+pFlyRedisClient->HELLO(CONFIG_RESP_VER);
+```

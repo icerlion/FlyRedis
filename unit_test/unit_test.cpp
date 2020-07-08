@@ -9,9 +9,10 @@ void Logger(const char* pszLog)
     printf("%s\n", pszLog);
 }
 
-const std::string CONST_REDIS_ADDR = "127.0.0.1:1000";
-const std::string CONST_REDIS_PASSWORD = "123456";
-const int CONST_RESP_VER = 3; // RESP should be 2 or 3
+const std::string CONFIG_REDIS_ADDR = "127.0.0.1:1000";
+std::string CONFIG_REDIS_PASSWORD = "";
+bool CONFIG_USE_TLS = true;
+int CONFIG_RESP_VER = 3; // RESP should be 2 or 3
 
 #define CREATE_REDIS_CLIENT() \
     CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Error, Logger); \
@@ -19,9 +20,10 @@ const int CONST_RESP_VER = 3; // RESP should be 2 or 3
     CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Notice, Logger); \
     CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Command, Logger); \
     CFlyRedisClient* pFlyRedisClient = new CFlyRedisClient(); \
-    pFlyRedisClient->SetRedisConfig(CONST_REDIS_ADDR, CONST_REDIS_PASSWORD); \
+    if (CONFIG_USE_TLS && !pFlyRedisClient->SetTLSContext("redis.crt", "redis.key", "ca.crt", "")) { return; }\
+    pFlyRedisClient->SetRedisConfig(CONFIG_REDIS_ADDR, CONFIG_REDIS_PASSWORD); \
     BOOST_CHECK(pFlyRedisClient->Open()); \
-    pFlyRedisClient->HELLO(CONST_RESP_VER);
+    pFlyRedisClient->HELLO(CONFIG_RESP_VER);
 
 #define DESTROY_REDIS_CLIENT() delete pFlyRedisClient;
 
@@ -272,9 +274,9 @@ BOOST_AUTO_TEST_CASE(KEY_STRING_ERASE)
     BOOST_CHECK(pFlyRedisClient->EXPIREAT(strKey, static_cast<int>(time(nullptr) + 60), nResult));
     BOOST_CHECK_EQUAL(nResult, 1);
     BOOST_CHECK(pFlyRedisClient->TTL(strKey, nResult));
-    BOOST_CHECK_GE(nResult, 60);
+    BOOST_CHECK_GE(nResult, 58);
     BOOST_CHECK(pFlyRedisClient->PTTL(strKey, nResult));
-    BOOST_CHECK_GE(nResult, 60 * 1000);
+    BOOST_CHECK_GE(nResult, 58 * 1000);
 
     BOOST_CHECK(pFlyRedisClient->PEXPIRE(strKey, 10000, nResult));
     BOOST_CHECK_EQUAL(nResult, 1);

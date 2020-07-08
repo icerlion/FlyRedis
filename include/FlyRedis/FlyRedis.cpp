@@ -26,21 +26,212 @@
 #include <stdarg.h>
 
 //////////////////////////////////////////////////////////////////////////
+// Begin of CFlyRedisNetStream
+#ifdef FLY_REDIS_ENABLE_TLS
+CFlyRedisNetStream::CFlyRedisNetStream(boost::asio::io_context& boostIOContext, bool bUseTLSFlag, boost::asio::ssl::context& boostTLSContext)
+    :m_strRecvBuff(),
+    m_boostIOContext(boostIOContext),
+    m_bUseTLSFlag(bUseTLSFlag),
+    m_boostTLSSocketStream(boostIOContext, boostTLSContext),
+    m_boostTCPSocketStream()
+{
+}
+#else
+CFlyRedisNetStream::CFlyRedisNetStream(boost::asio::io_context& boostIOContext)
+    :m_strRecvBuff(),
+    m_boostIOContext(boostIOContext),
+    m_boostTCPSocketStream()
+{
+}
+#endif // FLY_REDIS_ENABLE_TLS
+
+CFlyRedisNetStream::~CFlyRedisNetStream()
+{
+}
+
+bool CFlyRedisNetStream::Connect(const std::string& strRedisAddr)
+{
+    std::vector<std::string> vecField = CFlyRedis::SplitString(strRedisAddr, ':');
+    if (vecField.size() != 2)
+    {
+        return false;
+    }
+    boost::asio::ip::tcp::resolver boostResolver(m_boostIOContext);
+    boost::asio::ip::tcp::resolver::results_type boostEndPoints = boostResolver.resolve(boost::asio::ip::tcp::v4(), vecField[0], vecField[1]);
+#ifdef FLY_REDIS_ENABLE_TLS
+    if (m_bUseTLSFlag)
+    {
+        return ConnectAsTLS(boostEndPoints, strRedisAddr);
+    }
+#endif // FLY_REDIS_ENABLE_TLS
+    return ConnectAsTCP(boostEndPoints, strRedisAddr);
+}
+
+bool CFlyRedisNetStream::Read(int nExpectedLen)
+{
+    bool bResult = true;
+    char buffRecv[128] = { 0 };
+    boost::system::error_code boostErrorCode;
+    while (m_strRecvBuff.length() < nExpectedLen)
+    {
+        int nLeftBytes = nExpectedLen - (int)m_strRecvBuff.length();
+        while (nLeftBytes > 0)
+        {
+            int nRecvBytes = sizeof(buffRecv);
+            if (nRecvBytes > nLeftBytes)
+            {
+                nRecvBytes = nLeftBytes;
+            }
+            // Warning: this function maybe block
+            int nTransBytse = 0;
+#ifdef FLY_REDIS_ENABLE_TLS
+            if (m_bUseTLSFlag)
+            {
+                nTransBytse = (int)boost::asio::read(m_boostTLSSocketStream, boost::asio::buffer(buffRecv, nRecvBytes), boostErrorCode);
+            }
+            else
+#endif // FLY_REDIS_ENABLE_TLS
+            {
+                m_boostTCPSocketStream.read(buffRecv, nRecvBytes);
+                nTransBytse = nRecvBytes;
+            }
+
+            if (boostErrorCode)
+            {
+                CFlyRedis::Logger(FlyRedisLogLevel::Error, "Socket Read Error: [%s]", boostErrorCode.message().c_str());
+                bResult = false;
+                break;
+            }
+            m_strRecvBuff.append(buffRecv, nTransBytse);
+            nLeftBytes -= nTransBytse;
+        }
+    }
+    return bResult;
+}
+
+bool CFlyRedisNetStream::Write(const char* buffWrite, size_t nBuffLen)
+{
+    boost::system::error_code boostErrorCode;
+    size_t nSendBytes = 0;
+#ifdef FLY_REDIS_ENABLE_TLS
+    if (m_bUseTLSFlag)
+    {
+        nSendBytes = boost::asio::write(m_boostTLSSocketStream, boost::asio::buffer(buffWrite, nBuffLen), boostErrorCode);
+    }
+    else
+#endif // FLY_REDIS_ENABLE_TLS
+    {
+        m_boostTCPSocketStream.write(buffWrite, nBuffLen);
+        nSendBytes = nBuffLen;
+    }
+
+    if (boostErrorCode)
+    {
+        return false;
+    }
+    if (nBuffLen != nSendBytes)
+    {
+        return false;
+    }
+    return true;
+}
+
+#ifdef FLY_REDIS_ENABLE_TLS
+bool CFlyRedisNetStream::ConnectAsTLS(boost::asio::ip::tcp::resolver::results_type& boostEndPoints, const std::string& strRedisAddr)
+{
+    boost::system::error_code boostErrorCode;
+    boost::asio::connect(m_boostTLSSocketStream.lowest_layer(), boostEndPoints, boostErrorCode);
+    if (boostErrorCode)
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "TLS Connect failed: %s", boostErrorCode.message().c_str());
+        return false;
+    }
+    m_boostTLSSocketStream.handshake(boost::asio::ssl::stream_base::client, boostErrorCode);
+    if (boostErrorCode)
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "TLS handshake failed: %s", boostErrorCode.message().c_str());
+        return false;
+    }
+    auto& refLoewstLayer = m_boostTLSSocketStream.lowest_layer();
+    refLoewstLayer.set_option(boost::asio::ip::tcp::socket::keep_alive());
+    // Try to recv first error msg after connect to redis-server
+    bool bResult = true;
+    int nTryCount = 0;
+    char buffRecv[1024] = { 0 };
+    while (++nTryCount < 10)
+    {
+        if (refLoewstLayer.available(boostErrorCode) > 0)
+        {
+            // If run to here, maybe the server is running in protected mode, which will response an error msg, just print it as error log and return false
+            m_boostTLSSocketStream.read_some(boost::asio::buffer(buffRecv, sizeof(buffRecv)), boostErrorCode);
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "TLS ConnectEndPointFailed: [%s], Msg: %s", strRedisAddr.c_str(), buffRecv);
+            bResult = false;
+            break;
+        }
+        boost::this_thread::sleep_for(boost::chrono::milliseconds(1));
+    }
+    return bResult;
+}
+#endif // FLY_REDIS_ENABLE_TLS
+
+bool CFlyRedisNetStream::ConnectAsTCP(boost::asio::ip::tcp::resolver::results_type& boostEndPoints, const std::string& strRedisAddr)
+{
+    boost::system::error_code boostErrorCode;
+    boost::asio::connect(m_boostTCPSocketStream.socket(), boostEndPoints, boostErrorCode);
+    if (boostErrorCode)
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "TCP Connect failed: %s", boostErrorCode.message().c_str());
+        return false;
+    }
+    auto& refLoewstLayer = m_boostTCPSocketStream.socket();
+    refLoewstLayer.set_option(boost::asio::ip::tcp::socket::keep_alive());
+    // Try to recv first error msg after connect to redis-server
+    bool bResult = true;
+    int nTryCount = 0;
+    char buffRecv[1024] = { 0 };
+    while (++nTryCount < 10)
+    {
+        if (refLoewstLayer.available(boostErrorCode) > 0)
+        {
+            // If run to here, maybe the server is running in protected mode, which will response an error msg, just print it as error log and return false
+            m_boostTCPSocketStream.readsome(buffRecv, sizeof(buffRecv));
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "TCP ConnectEndPointFailed: [%s], Msg: %s", strRedisAddr.c_str(), buffRecv);
+            bResult = false;
+            break;
+        }
+        boost::this_thread::sleep_for(boost::chrono::milliseconds(1));
+    }
+    return bResult;
+}
+
+// End of CFlyRedisNetStream
+//////////////////////////////////////////////////////////////////////////
 // Begin of RedisSession function
-CFlyRedisSession::CFlyRedisSession()
+#ifdef FLY_REDIS_ENABLE_TLS
+CFlyRedisSession::CFlyRedisSession(boost::asio::io_context& boostIOContext, bool bUseTLSFlag, boost::asio::ssl::context& boostTLSContext)
     :m_strRedisAddress(),
-    m_nReadTimeOutSeconds(5),
     m_nMinSlot(0),
     m_nMaxSlot(0),
     m_bIsMasterNode(false),
-    m_boostTCPIOStream(),
-    m_buffReader(),
+    m_hNetStream(boostIOContext, bUseTLSFlag, boostTLSContext),
     m_bRedisResponseError(false),
     m_strRedisVersion(),
     m_nRESPVersion(2)
 {
-    memset(m_buffReader, 0, sizeof(m_buffReader));
 }
+#else
+CFlyRedisSession::CFlyRedisSession(boost::asio::io_context& boostIOContext)
+    :m_strRedisAddress(),
+    m_nMinSlot(0),
+    m_nMaxSlot(0),
+    m_bIsMasterNode(false),
+    m_hNetStream(boostIOContext),
+    m_bRedisResponseError(false),
+    m_strRedisVersion(),
+    m_nRESPVersion(2)
+{
+}
+#endif // FLY_REDIS_ENABLE_TLS
 
 CFlyRedisSession::~CFlyRedisSession()
 {
@@ -51,11 +242,6 @@ void CFlyRedisSession::SetRedisAddress(const std::string& strAddress)
     m_strRedisAddress = strAddress;
 }
 
-void CFlyRedisSession::SetReadTimeOut(int nSeconds)
-{
-    m_nReadTimeOutSeconds = nSeconds;
-}
-
 const std::string& CFlyRedisSession::GetRedisAddr() const
 {
     return m_strRedisAddress;
@@ -63,62 +249,7 @@ const std::string& CFlyRedisSession::GetRedisAddr() const
 
 bool CFlyRedisSession::Connect()
 {
-    std::vector<std::string> vecAddressField = CFlyRedis::SplitString(m_strRedisAddress, ':');
-    if (vecAddressField.size() != 2)
-    {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "ParseIPFailed, [%s] Invalid AddressFormat", m_strRedisAddress.c_str());
-        return false;
-    }
-    boost::system::error_code boostErrorCode;
-    //////////////////////////////////////////////////////////////////////////
-    const std::string& strHost = vecAddressField[0];
-    unsigned short nPort = static_cast<unsigned short>(atoi(vecAddressField[1].c_str()));
-    // Parse ip address
-    boost::asio::io_context boostIOContext;
-    boost::asio::ip::tcp::resolver boostResolver(boostIOContext);
-    boost::asio::ip::tcp::resolver::query boostQuery(strHost, "");
-    boost::asio::ip::tcp::resolver::iterator itEnd;
-    for (auto itCur = boostResolver.resolve(boostQuery, boostErrorCode); itCur != itEnd; ++itCur)
-    {
-        boost::asio::ip::tcp::endpoint boostCurEndPoint = *itCur;
-        boostCurEndPoint.port(nPort);
-        m_boostTCPIOStream.close();
-        m_boostTCPIOStream.connect(boostCurEndPoint);
-        if (m_boostTCPIOStream.good())
-        {
-            break;
-        }
-    }
-    if (boostErrorCode)
-    {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "ParseAddressFailed, [%s], Msg: [%d-%s]", m_strRedisAddress.c_str(), boostErrorCode.value(), boostErrorCode.message().c_str());
-        return false;
-    }
-    if (!m_boostTCPIOStream.good())
-    {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "ConnectEndPointFailed, [%s]", m_strRedisAddress.c_str());
-        return false;
-    }
-    auto& refBooostSocket = m_boostTCPIOStream.socket();
-    refBooostSocket.set_option(boost::asio::socket_base::keep_alive());
-    // Try to recv first error msg after connect to redis-server
-    bool bResult = true;
-    int nTryCount = 0;
-    while (++nTryCount < 10)
-    {
-        int nAvailableByteCount = static_cast<int>(refBooostSocket.available(boostErrorCode));
-        if (nAvailableByteCount > 0)
-        {
-            // If run to here, maybe the server is running in protected mode, which will response an error msg, just print it as error log and return false
-            m_boostTCPIOStream.read(m_buffReader, nAvailableByteCount);
-            CFlyRedis::Logger(FlyRedisLogLevel::Error, "ConnectEndPointFailed: [%s], Msg: %s", m_strRedisAddress.c_str(), m_buffReader);
-            bResult = false;
-            break;
-        }
-        boost::this_thread::sleep_for(boost::chrono::milliseconds(1));
-    }
-    CFlyRedis::Logger(FlyRedisLogLevel::Debug, "FlyRedisConnectTo: [%s] %s", m_strRedisAddress.c_str(), bResult ? "Success" : "Failed");
-    return bResult;
+    return m_hNetStream.Connect(m_strRedisAddress);
 }
 
 bool CFlyRedisSession::AcceptHashSlot(int nSlot, bool bIsWrite, FlyRedisReadWriteType nFlyRedisReadWriteType) const
@@ -142,8 +273,7 @@ bool CFlyRedisSession::ProcRedisRequest(const std::string& strRedisCmdRequest)
     m_stRedisResponse.Reset();
     m_bRedisResponseError = false;
     // Send Msg To RedisServer
-    m_boostTCPIOStream.expires_after(std::chrono::seconds(m_nReadTimeOutSeconds));
-    m_boostTCPIOStream.write(strRedisCmdRequest.c_str(), strRedisCmdRequest.length());
+    m_hNetStream.Write(strRedisCmdRequest.c_str(), strRedisCmdRequest.length());
     if (!RecvRedisResponse())
     {
         return false;
@@ -385,9 +515,15 @@ bool CFlyRedisSession::HELLO_AUTH_SETNAME(int nVersion, const std::string& strUs
 
 bool CFlyRedisSession::RecvRedisResponse()
 {
+    if (!m_hNetStream.Read(1))
+    {
+        return false;
+    }
     char chHead = 0;
-    m_boostTCPIOStream.expires_after(std::chrono::seconds(m_nReadTimeOutSeconds));
-    m_boostTCPIOStream.read(&chHead, 1);
+    if (!m_hNetStream.PickFirstChar(chHead))
+    {
+        return false;
+    }
     bool bResult = false;
     switch (chHead)
     {
@@ -616,12 +752,21 @@ bool CFlyRedisSession::VerifyRedisServerVersion6(const char* pszCmdName) const
 bool CFlyRedisSession::ReadUntilCRLF()
 {
     m_stRedisResponse.strRedisResponse.clear();
+    bool bResult = true;
     char chPreValue = 0;
     while (true)
     {
+        if (!m_hNetStream.Read(1))
+        {
+            bResult = false;
+            break;
+        }
         char chCurValue = 0;
-        m_boostTCPIOStream.expires_after(std::chrono::seconds(m_nReadTimeOutSeconds));
-        m_boostTCPIOStream.read(&chCurValue, 1);
+        if (!m_hNetStream.PickFirstChar(chCurValue))
+        {
+            bResult = false;
+            break;
+        }
         m_stRedisResponse.strRedisResponse.append(1, chCurValue);
         if (chPreValue == '\r' && chCurValue == '\n')
         {
@@ -630,7 +775,7 @@ bool CFlyRedisSession::ReadUntilCRLF()
         }
         chPreValue = chCurValue;
     }
-    return true;
+    return bResult;
 }
 
 bool CFlyRedisSession::ReadRedisResponseVarLenString()
@@ -661,27 +806,27 @@ bool CFlyRedisSession::ReadRedisResponseVarLenString()
     }
     // Length: 2 char for \r\n
     m_stRedisResponse.strRedisResponse.clear();
-    memset(m_buffReader, 0, CONST_BUFF_READER_LEN);
-    while (nLen > 0)
+    if (!m_hNetStream.Read(nLen))
     {
-        if (nLen <= CONST_BUFF_READER_LEN)
-        {
-            m_boostTCPIOStream.expires_after(std::chrono::seconds(m_nReadTimeOutSeconds));
-            m_boostTCPIOStream.read(m_buffReader, nLen);
-            m_stRedisResponse.strRedisResponse.append(m_buffReader, nLen);
-            break;
-        }
-        else
-        {
-            m_boostTCPIOStream.expires_after(std::chrono::seconds(m_nReadTimeOutSeconds));
-            m_boostTCPIOStream.read(m_buffReader, CONST_BUFF_READER_LEN);
-            m_stRedisResponse.strRedisResponse.append(m_buffReader, CONST_BUFF_READER_LEN);
-            nLen -= CONST_BUFF_READER_LEN;
-        }
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "NetStream Read %d Failed", nLen);
+        return false;
+    }
+    if (!m_hNetStream.ConsumeRecvBuff(m_stRedisResponse.strRedisResponse, nLen))
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "NetStream ConsumeRecvBuff %d Failed", nLen);
+        return false;
     }
     // Read tail CRLF to make stream empty
-    m_boostTCPIOStream.expires_after(std::chrono::seconds(m_nReadTimeOutSeconds));
-    m_boostTCPIOStream.read(m_buffReader, 2);
+    if (!m_hNetStream.Read(2))
+    {
+        return false;
+    }
+    std::string strCRLF;
+    if (!m_hNetStream.ConsumeRecvBuff(strCRLF, 2))
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "NetStream ConsumeRecvBuff CRLF Failed");
+        return false;
+    }
     m_stRedisResponse.vecRedisResponse.push_back(m_stRedisResponse.strRedisResponse);
     return true;
 }
@@ -718,10 +863,14 @@ std::string CFlyRedisSession::GetServerInfoSectionField(const std::map<std::stri
 #define CHECK_CUR_REDIS_SESSION() if (nullptr == m_pCurRedisSession) { CFlyRedis::Logger(FlyRedisLogLevel::Error, "CurRedisSessionIsNull"); m_bHasBadRedisSession = true; return false; }
 
 CFlyRedisClient::CFlyRedisClient()
-    :m_bClusterFlag(false),
+    :m_boostIOContext(),
+#ifdef FLY_REDIS_ENABLE_TLS
+    m_bUseTLSFlag(false),
+    m_boostTLSContext(boost::asio::ssl::context::sslv23_client),
+#endif // FLY_REDIS_ENABLE_TLS
+    m_bClusterFlag(false),
     m_nFlyRedisClusterDetectType(FlyRedisClusterDetectType::AutoDetect),
     m_nFlyRedisReadWriteType(FlyRedisReadWriteType::ReadWriteOnMaster),
-    m_nReadTimeOutSeconds(5),
     m_pCurRedisSession(nullptr),
     m_nRedisNodeCount(0),
     m_bHasBadRedisSession(false)
@@ -744,15 +893,63 @@ void CFlyRedisClient::SetRedisReadWriteType(FlyRedisReadWriteType nFlyRedisReadW
     m_nFlyRedisReadWriteType = nFlyRedisReadWriteType;
 }
 
-void CFlyRedisClient::SetRedisReadTimeOutSeconds(int nSeconds)
-{
-    m_nReadTimeOutSeconds = nSeconds;
-}
-
 void CFlyRedisClient::SetRedisClusterDetectType(FlyRedisClusterDetectType nFlyRedisClusterDetectType)
 {
     m_nFlyRedisClusterDetectType = nFlyRedisClusterDetectType;
 }
+
+#ifdef FLY_REDIS_ENABLE_TLS
+bool CFlyRedisClient::SetTLSContext(const std::string& strTLSCert, const std::string& strTLSKey, const std::string& strTLSCACert)
+{
+    return SetTLSContext(strTLSCert, strTLSKey, strTLSCACert, "");
+}
+
+bool CFlyRedisClient::SetTLSContext(const std::string& strTLSCert, const std::string& strTLSKey, const std::string& strTLSCACert, const std::string& strTLSCACertDir)
+{
+    m_bUseTLSFlag = true;
+    boost::system::error_code boostErrorCode;
+    m_boostTLSContext.set_options(boost::asio::ssl::context::no_sslv2 | boost::asio::ssl::context::no_sslv3, boostErrorCode);
+    if (boostErrorCode)
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "SSL set_options failed: %s", boostErrorCode.message().c_str());
+        return false;
+    }
+    m_boostTLSContext.set_verify_mode(boost::asio::ssl::verify_peer, boostErrorCode);
+    if (boostErrorCode)
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "SSL set_verify_mode failed: %s", boostErrorCode.message().c_str());
+        return false;
+    }
+    m_boostTLSContext.load_verify_file(strTLSCACert.c_str(), boostErrorCode);
+    if (boostErrorCode)
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "SSL load_verify_file failed: %s", boostErrorCode.message().c_str());
+        return false;
+    }
+    if (!strTLSCACertDir.empty())
+    {
+        m_boostTLSContext.add_verify_path(strTLSCACertDir.c_str(), boostErrorCode);
+        if (boostErrorCode)
+        {
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "SSL add_verify_path failed: %s", boostErrorCode.message().c_str());
+            return false;
+        }
+    }
+    m_boostTLSContext.use_certificate_chain_file(strTLSCert.c_str(), boostErrorCode);
+    if (boostErrorCode)
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "SSL use_certificate_chain_file failed: %s", boostErrorCode.message().c_str());
+        return false;
+    }
+    m_boostTLSContext.use_private_key_file(strTLSKey.c_str(), boost::asio::ssl::context_base::file_format::pem, boostErrorCode);
+    if (boostErrorCode)
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "SSL use_private_key_file failed: %s", boostErrorCode.message().c_str());
+        return false;
+    }
+    return true;
+}
+#endif // FLY_REDIS_ENABLE_TLS
 
 bool CFlyRedisClient::Open()
 {
@@ -2664,16 +2861,19 @@ CFlyRedisSession* CFlyRedisClient::CreateRedisSession(const std::string& strRedi
         m_pCurRedisSession = itFind->second;
         return m_pCurRedisSession;
     }
-    CFlyRedisSession* pRedisSession = new CFlyRedisSession();
+#ifdef FLY_REDIS_ENABLE_TLS
+    CFlyRedisSession* pRedisSession = new CFlyRedisSession(m_boostIOContext, m_bUseTLSFlag, m_boostTLSContext);
+#else
+    CFlyRedisSession* pRedisSession = new CFlyRedisSession(m_boostIOContext);
+#endif // FLY_REDIS_ENABLE_TLS
     pRedisSession->SetRedisAddress(strRedisAddress);
-    pRedisSession->SetReadTimeOut(m_nReadTimeOutSeconds);
     if (!pRedisSession->Connect())
     {
         delete pRedisSession;
         pRedisSession = nullptr;
         return nullptr;
     }
-    if (!pRedisSession->AUTH(m_strRedisPasswod))
+    if (!m_strRedisPasswod.empty() && !pRedisSession->AUTH(m_strRedisPasswod))
     {
         delete pRedisSession;
         pRedisSession = nullptr;
@@ -2935,6 +3135,8 @@ void CFlyRedis::SetLoggerHandler(FlyRedisLogLevel nLogLevel, std::function<void(
         break;
     case FlyRedisLogLevel::Command:
         ms_pfnLoggerPersistence = pfnLoggerHandler;
+        break;
+    default:
         break;
     }
 }

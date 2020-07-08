@@ -6,12 +6,15 @@ void Logger(const char* pszMsg)
     printf("%s\n", pszMsg);
 }
 
-void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword)
+void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword, bool bUseTLSFlag)
 {
     CFlyRedisClient hFlyRedisClient;
     hFlyRedisClient.SetRedisConfig(strRedisAddr, strPassword);
-    hFlyRedisClient.SetRedisReadTimeOutSeconds(10);
     hFlyRedisClient.SetRedisReadWriteType(FlyRedisReadWriteType::ReadWriteOnMaster);
+    if (bUseTLSFlag && !hFlyRedisClient.SetTLSContext("redis.crt", "redis.key", "ca.crt", ""))
+    {
+        return;
+    }
     //hFlyRedisClient.SetRedisClusterDetectType(FlyRedisClusterDetectType::DisableCluster);
     if (!hFlyRedisClient.Open())
     {
@@ -38,8 +41,12 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword)
     hFlyRedisClient.SET(strKey, std::to_string(1.5f));
     hFlyRedisClient.INCRBYFLOAT(strKey, 0.1f, fResult);
     //////////////////////////////////////////////////////////////////////////
-    for (int i = 0; i < 10000; ++i)
+    for (int i = 0; i < 1000; ++i)
     {
+        if (i % 100 == 0)
+        {
+            printf("%d\n", i);
+        }
         strKey = "key_" + std::to_string(i);
         if (!hFlyRedisClient.SET(strKey, "value"))
         {
@@ -56,7 +63,8 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword)
             Logger("DEL FAILED");
             continue;
         }
-        for (int j = 0; j < 10; ++j)
+        strKey = "hashkey_" + std::to_string(i);
+        for (int j = 0; j < 5; ++j)
         {
             std::string strHashField = "field_" + std::to_string(j);
             if (!hFlyRedisClient.HSET(strKey, strHashField, "value", nResult))
@@ -76,7 +84,7 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword)
             }
         }
         strKey = "setkey_" + std::to_string(i);
-        for (int j = 0; j < 10; ++j)
+        for (int j = 0; j < 5; ++j)
         {
             std::string strValue = "sval_" + std::to_string(j);
             if (!hFlyRedisClient.SADD(strKey, strValue, nResult))
@@ -90,7 +98,6 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword)
                 continue;
             }
         }
-        
     }
     time_t nElapsedTime = time(nullptr) - nBeginTime;
     Logger(("TimeCost: " + std::to_string(nElapsedTime)).c_str());
@@ -98,25 +105,26 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword)
 
 int main(int argc, char* argv[])
 {
-    if (argc != 4)
+    if (argc != 5)
     {
         // Param: 127.0.0.1:8000 123456 1
-        Logger("sample redis_ip:redis_port redis_password thread_count");
+        Logger("sample redis_ip:redis_port redis_password enable_tls thread_count");
         return -1;
     }
     std::string strRedisAddr = argv[1];
     std::string strPassword = argv[2];
-    int nThreadCount = atoi(argv[3]);
+    bool bUseTLSFlag = (1 == atoi(argv[3]));
+    int nThreadCount = atoi(argv[4]);
     // Config FlyRedis, but it's not not necessary
-    CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Debug, Logger);
-    CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Notice, Logger);
-    CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Error, Logger);
-    CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Warning, Logger);
-    CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Command, Logger);
+    //CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Debug, Logger);
+    //CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Notice, Logger);
+    //CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Error, Logger);
+    //CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Warning, Logger);
+    //CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Command, Logger);
     boost::thread_group tg;
     for (int i = 0; i < nThreadCount; ++i)
     {
-        tg.create_thread(boost::bind(ThreadTestFlyRedis, strRedisAddr, strPassword));
+        tg.create_thread(boost::bind(ThreadTestFlyRedis, strRedisAddr, strPassword, bUseTLSFlag));
     }
     tg.join_all();
     Logger("Done Test");
