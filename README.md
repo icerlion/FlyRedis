@@ -2,9 +2,9 @@
 C++ Redis Client, base on Boost.asio.
 This project depends on *boost_1_72_0*, and The RedisServer is *5.0+*. At the same time, you can try it with other version of boost and redis server.
 
-## Enable SetReadTimeoutSeconds!
-## TLS IS READY NOW! 2020-07-09
-## RESP3 IS READY NOW! 2020-06-20
+## 2020-11-18: Enable SetReadTimeoutSeconds!
+## 2020-07-09: TLS IS READY NOW! 
+## 2020-06-20: RESP3 IS READY NOW! 
 
 
 [![Build Status](https://travis-ci.com/icerlion/FlyRedis.svg?branch=master)](https://travis-ci.com/icerlion/FlyRedis)
