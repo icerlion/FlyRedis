@@ -10,11 +10,11 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="..\include\FlyRedis\FlyRedis.cpp">
       <Filter>src\FlyRedis</Filter>
+    </ClCompile>
+    <ClCompile Include="unit_test.cpp">
+      <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

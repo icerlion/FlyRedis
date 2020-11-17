@@ -45,18 +45,33 @@ public:
 #endif // FLY_REDIS_ENABLE_TLS
     ~CFlyRedisNetStream();
 
-    bool Connect(const std::string& strRedisAddr);
+    inline void SetRedisAddress(const std::string& strAddress)
+    {
+        m_strRedisAddress = strAddress;
+    }
+
+    inline const std::string& GetRedisAddr() const
+    {
+        return m_strRedisAddress;
+    }
+
+    inline void SetReadTimeoutSeconds(int nSeconds)
+    {
+        m_nReadTimeoutSeconds = nSeconds;
+    }
+
+    bool Connect();
     
     bool Read(int nExpectedLen);
 
     bool Write(const char* buffWrite, size_t nBuffLen);
 
-    bool PickFirstChar(char& chHead)
+    inline bool PickFirstChar(char& chHead)
     {
-        if (m_strRecvBuff.length() >= 1)
+        if (m_strGlobalRecvBuff.length() >= 1)
         {
-            chHead = m_strRecvBuff[0];
-            m_strRecvBuff.erase(m_strRecvBuff.begin());
+            chHead = m_strGlobalRecvBuff[0];
+            m_strGlobalRecvBuff.erase(m_strGlobalRecvBuff.begin());
             return true;
         }
         return false;
@@ -64,28 +79,37 @@ public:
 
     inline bool ConsumeRecvBuff(std::string& strDstBuff, int nLen)
     {
-        if (nLen > m_strRecvBuff.size())
+        if (nLen > (int)m_strGlobalRecvBuff.size())
         {
             return false;
         }
-        strDstBuff.append(m_strRecvBuff.c_str(), nLen);
-        m_strRecvBuff.erase(m_strRecvBuff.begin(), m_strRecvBuff.begin() + nLen);
+        strDstBuff.append(m_strGlobalRecvBuff.c_str(), nLen);
+        m_strGlobalRecvBuff.erase(m_strGlobalRecvBuff.begin(), m_strGlobalRecvBuff.begin() + nLen);
         return true;
     }
 
 private:
-    bool ConnectAsTLS(boost::asio::ip::tcp::resolver::results_type& boostEndPoints, const std::string& strRedisAddr);
+    bool ConnectAsTLS(boost::asio::ip::tcp::resolver::results_type& boostEndPoints);
 
-    bool ConnectAsTCP(boost::asio::ip::tcp::resolver::results_type& boostEndPoints, const std::string& strRedisAddr);
+    bool ConnectAsTCP(boost::asio::ip::tcp::resolver::results_type& boostEndPoints);
+
+    void HandleRead(const boost::system::error_code& boostErrorCode, size_t nBytesTransferred);
+
+    void StartAsyncRead();
 
 private:
-    std::string m_strRecvBuff;
+    // RedisAddress, format: host:port
+    std::string m_strRedisAddress;
+    int m_nReadTimeoutSeconds;
+    std::string m_strGlobalRecvBuff;
+    char m_caThisbuffRecv[512];
+    bool m_bInAsyncRead;
     boost::asio::io_context& m_boostIOContext;
 #ifdef FLY_REDIS_ENABLE_TLS
     bool m_bUseTLSFlag;
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket> m_boostTLSSocketStream;
 #endif // FLY_REDIS_ENABLE_TLS
-    boost::asio::ip::tcp::iostream m_boostTCPSocketStream;
+    boost::asio::ip::tcp::socket m_boostTCPSocketStream;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -144,6 +168,12 @@ public:
 
     // Set redis address
     void SetRedisAddress(const std::string& strAddress);
+
+    // Set read timeout seconds
+    inline void SetReadTimeoutSeconds(int nSeconds)
+    {
+        m_hNetStream.SetReadTimeoutSeconds(nSeconds);
+    }
 
     // Get redis address
     const std::string& GetRedisAddr() const;
@@ -241,8 +271,6 @@ private:
     std::string GetServerInfoSectionField(const std::map<std::string, std::map<std::string, std::string> >& mapSectionInfo, const std::string& strSection, const std::string& strField);
 
 private:
-    // RedisAddress, format: host:port
-    std::string m_strRedisAddress;
     // SlotRange
     int m_nMinSlot;
     int m_nMaxSlot;
@@ -272,14 +300,13 @@ public:
 
     // Set redis config, address as 127.0.0.1:6789
     void SetRedisConfig(const std::string& strRedisAddress, const std::string& strPassword);
+    void SetReadTimeoutSeconds(int nSeconds);
     void SetRedisReadWriteType(FlyRedisReadWriteType nFlyRedisReadWriteType);
     void SetRedisClusterDetectType(FlyRedisClusterDetectType nFlyRedisClusterDetectType);
 
-#ifdef FLY_REDIS_ENABLE_TLS
     // Set TLS config
     bool SetTLSContext(const std::string& strTLSCert, const std::string& strTLSKey, const std::string& strTLSCACert);
     bool SetTLSContext(const std::string& strTLSCert, const std::string& strTLSKey, const std::string& strTLSCACert, const std::string& strTLSCACertDir);
-#endif // FLY_REDIS_ENABLE_TLS
 
     // Get ClusterFlag
     inline bool GetClusterFlag() const
@@ -513,6 +540,7 @@ private:
     boost::asio::ssl::context m_boostTLSContext;
 #endif // FLY_REDIS_ENABLE_TLS
     //////////////////////////////////////////////////////////////////////////
+    int m_nReadTimeoutSeconds;
     std::string m_strRedisAddress;
     std::set<std::string> m_setRedisAddressSeed;
     std::string m_strRedisPasswod;

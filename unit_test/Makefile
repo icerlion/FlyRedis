@@ -10,10 +10,10 @@ Include_Path=\
 	-I"../include/" \
 	-I"../../boost_1_72_0/" \
 
-Output_File=./sample
+Output_File=./unit_test
 
 # PreCompile_Macro
-PreCompile_Macro=-DGCC_BUILD -DLINUX -D_DEBUG -D_LIB -DFLY_REDIS_ENABLE_TLS
+PreCompile_Macro=-DGCC_BUILD -DLINUX -D_DEBUG -D_LIB
 
 # Compiler_Flags
 Compiler_Flags=-O0 -Wall -ggdb -std=c++11
@@ -42,18 +42,18 @@ init:
 .PHONE: build
 build: init\
 	./build/FlyRedis.o \
-	./build/main.o
+	./build/unit_test.o
 	@echo "|===>RunTarget: build of sample"
 	g++ \
 	./build/FlyRedis.o \
-	./build/main.o -lrt -ldl $(Library_Path) $(Link_Library_Static) $(Link_Library_Dynamic) -o $(Output_File)
+	./build/unit_test.o -lrt -ldl $(Library_Path) $(Link_Library_Static) $(Link_Library_Dynamic) -o $(Output_File)
 	@echo "|===>Finish Output $(Output_File)"
 
-# Compile cpp file main.cpp
--include ./build/main.d
-./build/main.o: main.cpp
-	$(Cpp_Compiler) $(Include_Path) $(PreCompile_Macro) $(Compiler_Flags) -c main.cpp -o ./build/main.o
-	$(Cpp_Compiler) $(Include_Path) $(PreCompile_Macro) $(Compiler_Flags) -MM main.cpp > ./build/main.d
+# Compile cpp file unit_test.cpp
+-include ./build/unit_test.d
+./build/unit_test.o: unit_test.cpp
+	$(Cpp_Compiler) $(Include_Path) $(PreCompile_Macro) $(Compiler_Flags) -c unit_test.cpp -o ./build/unit_test.o
+	$(Cpp_Compiler) $(Include_Path) $(PreCompile_Macro) $(Compiler_Flags) -MM unit_test.cpp > ./build/unit_test.d
 	
 # Compile cpp file FlyRedis.cpp
 -include ./build/FlyRedis.d

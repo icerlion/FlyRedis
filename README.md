@@ -2,6 +2,7 @@
 C++ Redis Client, base on Boost.asio.
 This project depends on *boost_1_72_0*, and The RedisServer is *5.0+*. At the same time, you can try it with other version of boost and redis server.
 
+## Enable SetReadTimeoutSeconds!
 ## TLS IS READY NOW! 2020-07-09
 ## RESP3 IS READY NOW! 2020-06-20
 
@@ -28,7 +29,7 @@ Linux: {fly_redis_home}/Makefile
 Windows: {fly_redis_home}/sample/sample.vcxproj  
 Linux: {fly_redis_home}/sample/Makefile  
 
-### Use FlyRedis In Code
+### Use FlyRedis In Your Code
 
 ```
 // If you want collect RedisLog, you can call CFlyRedis::SetLoggerHandler

@@ -29,18 +29,24 @@
 // Begin of CFlyRedisNetStream
 #ifdef FLY_REDIS_ENABLE_TLS
 CFlyRedisNetStream::CFlyRedisNetStream(boost::asio::io_context& boostIOContext, bool bUseTLSFlag, boost::asio::ssl::context& boostTLSContext)
-    :m_strRecvBuff(),
+    :m_strRedisAddress(),
+    m_nReadTimeoutSeconds(5),
+    m_strGlobalRecvBuff(),
+    m_bInAsyncRead(false),
     m_boostIOContext(boostIOContext),
     m_bUseTLSFlag(bUseTLSFlag),
     m_boostTLSSocketStream(boostIOContext, boostTLSContext),
-    m_boostTCPSocketStream()
+    m_boostTCPSocketStream(boostIOContext)
 {
 }
 #else
 CFlyRedisNetStream::CFlyRedisNetStream(boost::asio::io_context& boostIOContext)
-    :m_strRecvBuff(),
+    :m_strRedisAddress(),
+    m_nReadTimeoutSeconds(5),
+    m_strGlobalRecvBuff(),
+    m_bInAsyncRead(false),
     m_boostIOContext(boostIOContext),
-    m_boostTCPSocketStream()
+    m_boostTCPSocketStream(boostIOContext)
 {
 }
 #endif // FLY_REDIS_ENABLE_TLS
@@ -49,9 +55,9 @@ CFlyRedisNetStream::~CFlyRedisNetStream()
 {
 }
 
-bool CFlyRedisNetStream::Connect(const std::string& strRedisAddr)
+bool CFlyRedisNetStream::Connect()
 {
-    std::vector<std::string> vecField = CFlyRedis::SplitString(strRedisAddr, ':');
+    std::vector<std::string> vecField = CFlyRedis::SplitString(m_strRedisAddress, ':');
     if (vecField.size() != 2)
     {
         return false;
@@ -61,52 +67,41 @@ bool CFlyRedisNetStream::Connect(const std::string& strRedisAddr)
 #ifdef FLY_REDIS_ENABLE_TLS
     if (m_bUseTLSFlag)
     {
-        return ConnectAsTLS(boostEndPoints, strRedisAddr);
+        return ConnectAsTLS(boostEndPoints);
     }
 #endif // FLY_REDIS_ENABLE_TLS
-    return ConnectAsTCP(boostEndPoints, strRedisAddr);
+    return ConnectAsTCP(boostEndPoints);
 }
 
 bool CFlyRedisNetStream::Read(int nExpectedLen)
 {
-    bool bResult = true;
-    char buffRecv[128] = { 0 };
-    boost::system::error_code boostErrorCode;
-    while (m_strRecvBuff.length() < nExpectedLen)
+    if ((int)m_strGlobalRecvBuff.length() >= nExpectedLen)
     {
-        int nLeftBytes = nExpectedLen - (int)m_strRecvBuff.length();
-        while (nLeftBytes > 0)
+        return true;
+    }
+    boost::system::error_code boostErrorCode;
+    time_t nExpiredTime = time(nullptr) + m_nReadTimeoutSeconds;
+    while (time(nullptr) < nExpiredTime)
+    {
+        m_boostIOContext.restart();
+        StartAsyncRead();
+        m_boostIOContext.run_for(std::chrono::milliseconds(50));
+        if (boostErrorCode)
         {
-            int nRecvBytes = sizeof(buffRecv);
-            if (nRecvBytes > nLeftBytes)
-            {
-                nRecvBytes = nLeftBytes;
-            }
-            // Warning: this function maybe block
-            int nTransBytse = 0;
-#ifdef FLY_REDIS_ENABLE_TLS
-            if (m_bUseTLSFlag)
-            {
-                nTransBytse = (int)boost::asio::read(m_boostTLSSocketStream, boost::asio::buffer(buffRecv, nRecvBytes), boostErrorCode);
-            }
-            else
-#endif // FLY_REDIS_ENABLE_TLS
-            {
-                m_boostTCPSocketStream.read(buffRecv, nRecvBytes);
-                nTransBytse = nRecvBytes;
-            }
-
-            if (boostErrorCode)
-            {
-                CFlyRedis::Logger(FlyRedisLogLevel::Error, "Socket Read Error: [%s]", boostErrorCode.message().c_str());
-                bResult = false;
-                break;
-            }
-            m_strRecvBuff.append(buffRecv, nTransBytse);
-            nLeftBytes -= nTransBytse;
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "Boost Pool Error %d-%s", boostErrorCode.value(), boostErrorCode.message().c_str());
+            break;
+        }
+        if ((int)m_strGlobalRecvBuff.length() >= nExpectedLen)
+        {
+            break;
         }
     }
-    return bResult;
+    if ((int)m_strGlobalRecvBuff.size() < nExpectedLen)
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "Read Data From Redis Timeout");
+        return false;
+    }
+    return true;
 }
 
 bool CFlyRedisNetStream::Write(const char* buffWrite, size_t nBuffLen)
@@ -121,8 +116,7 @@ bool CFlyRedisNetStream::Write(const char* buffWrite, size_t nBuffLen)
     else
 #endif // FLY_REDIS_ENABLE_TLS
     {
-        m_boostTCPSocketStream.write(buffWrite, nBuffLen);
-        nSendBytes = nBuffLen;
+        nSendBytes = boost::asio::write(m_boostTCPSocketStream, boost::asio::buffer(buffWrite, nBuffLen), boostErrorCode);
     }
 
     if (boostErrorCode)
@@ -137,19 +131,19 @@ bool CFlyRedisNetStream::Write(const char* buffWrite, size_t nBuffLen)
 }
 
 #ifdef FLY_REDIS_ENABLE_TLS
-bool CFlyRedisNetStream::ConnectAsTLS(boost::asio::ip::tcp::resolver::results_type& boostEndPoints, const std::string& strRedisAddr)
+bool CFlyRedisNetStream::ConnectAsTLS(boost::asio::ip::tcp::resolver::results_type& boostEndPoints)
 {
     boost::system::error_code boostErrorCode;
     boost::asio::connect(m_boostTLSSocketStream.lowest_layer(), boostEndPoints, boostErrorCode);
     if (boostErrorCode)
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "TLS Connect failed: %s", boostErrorCode.message().c_str());
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "TLS Connect %s Failed As %s", m_strRedisAddress.c_str(), boostErrorCode.message().c_str());
         return false;
     }
     m_boostTLSSocketStream.handshake(boost::asio::ssl::stream_base::client, boostErrorCode);
     if (boostErrorCode)
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "TLS handshake failed: %s", boostErrorCode.message().c_str());
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "TLS HandShake %s Failed As %s", m_strRedisAddress.c_str(), boostErrorCode.message().c_str());
         return false;
     }
     auto& refLoewstLayer = m_boostTLSSocketStream.lowest_layer();
@@ -164,7 +158,7 @@ bool CFlyRedisNetStream::ConnectAsTLS(boost::asio::ip::tcp::resolver::results_ty
         {
             // If run to here, maybe the server is running in protected mode, which will response an error msg, just print it as error log and return false
             m_boostTLSSocketStream.read_some(boost::asio::buffer(buffRecv, sizeof(buffRecv)), boostErrorCode);
-            CFlyRedis::Logger(FlyRedisLogLevel::Error, "TLS ConnectEndPointFailed: [%s], Msg: %s", strRedisAddr.c_str(), buffRecv);
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "TLS ConnectEndPointFailed %s As %s", m_strRedisAddress.c_str(), buffRecv);
             bResult = false;
             break;
         }
@@ -174,28 +168,27 @@ bool CFlyRedisNetStream::ConnectAsTLS(boost::asio::ip::tcp::resolver::results_ty
 }
 #endif // FLY_REDIS_ENABLE_TLS
 
-bool CFlyRedisNetStream::ConnectAsTCP(boost::asio::ip::tcp::resolver::results_type& boostEndPoints, const std::string& strRedisAddr)
+bool CFlyRedisNetStream::ConnectAsTCP(boost::asio::ip::tcp::resolver::results_type& boostEndPoints)
 {
     boost::system::error_code boostErrorCode;
-    boost::asio::connect(m_boostTCPSocketStream.socket(), boostEndPoints, boostErrorCode);
+    boost::asio::connect(m_boostTCPSocketStream, boostEndPoints, boostErrorCode);
     if (boostErrorCode)
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "TCP Connect failed: %s", boostErrorCode.message().c_str());
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "TCP Connect %s Failed %s", m_strRedisAddress.c_str(), boostErrorCode.message().c_str());
         return false;
     }
-    auto& refLoewstLayer = m_boostTCPSocketStream.socket();
-    refLoewstLayer.set_option(boost::asio::ip::tcp::socket::keep_alive());
+    m_boostTCPSocketStream.set_option(boost::asio::ip::tcp::socket::keep_alive());
     // Try to recv first error msg after connect to redis-server
     bool bResult = true;
     int nTryCount = 0;
     char buffRecv[1024] = { 0 };
     while (++nTryCount < 10)
     {
-        if (refLoewstLayer.available(boostErrorCode) > 0)
+        if (m_boostTCPSocketStream.available(boostErrorCode) > 0)
         {
             // If run to here, maybe the server is running in protected mode, which will response an error msg, just print it as error log and return false
-            m_boostTCPSocketStream.readsome(buffRecv, sizeof(buffRecv));
-            CFlyRedis::Logger(FlyRedisLogLevel::Error, "TCP ConnectEndPointFailed: [%s], Msg: %s", strRedisAddr.c_str(), buffRecv);
+            m_boostTCPSocketStream.read_some(boost::asio::buffer(buffRecv, sizeof(buffRecv)));
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "TCP ConnectEndPointFailed: %s As %s", m_strRedisAddress.c_str(), buffRecv);
             bResult = false;
             break;
         }
@@ -204,13 +197,57 @@ bool CFlyRedisNetStream::ConnectAsTCP(boost::asio::ip::tcp::resolver::results_ty
     return bResult;
 }
 
+void CFlyRedisNetStream::HandleRead(const boost::system::error_code& boostErrorCode, size_t nBytesTransferred)
+{
+    //std::string strReadBuff;
+    //strReadBuff.append(m_caThisbuffRecv, nBytesTransferred);
+    m_bInAsyncRead = false;
+    if (boostErrorCode)
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "HandleRead Error, Msg %s, Address %s", boostErrorCode.message().c_str(), m_strRedisAddress.c_str());
+        return;
+    }
+    if (0 == nBytesTransferred)
+    {
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "HandleRead Error, ByteTransfer Is 0, Address %s", m_strRedisAddress.c_str());
+        return;
+    }
+    m_strGlobalRecvBuff.append(m_caThisbuffRecv, nBytesTransferred);
+}
+
+void CFlyRedisNetStream::StartAsyncRead()
+{
+    if (m_bInAsyncRead)
+    {
+        return;
+    }
+    m_bInAsyncRead = true;
+#ifdef FLY_REDIS_ENABLE_TLS
+    if (m_bUseTLSFlag)
+    {
+        m_boostTLSSocketStream.async_read_some(boost::asio::buffer(m_caThisbuffRecv, sizeof(m_caThisbuffRecv)),
+            boost::bind(&CFlyRedisNetStream::HandleRead,
+                this,
+                boost::asio::placeholders::error,
+                boost::asio::placeholders::bytes_transferred));
+    }
+    else
+#endif // FLY_REDIS_ENABLE_TLS
+    {
+        m_boostTCPSocketStream.async_read_some(boost::asio::buffer(m_caThisbuffRecv, sizeof(m_caThisbuffRecv)),
+            boost::bind(&CFlyRedisNetStream::HandleRead,
+                this,
+                boost::asio::placeholders::error,
+                boost::asio::placeholders::bytes_transferred));
+    }
+}
+
 // End of CFlyRedisNetStream
 //////////////////////////////////////////////////////////////////////////
 // Begin of RedisSession function
 #ifdef FLY_REDIS_ENABLE_TLS
 CFlyRedisSession::CFlyRedisSession(boost::asio::io_context& boostIOContext, bool bUseTLSFlag, boost::asio::ssl::context& boostTLSContext)
-    :m_strRedisAddress(),
-    m_nMinSlot(0),
+    :m_nMinSlot(0),
     m_nMaxSlot(0),
     m_bIsMasterNode(false),
     m_hNetStream(boostIOContext, bUseTLSFlag, boostTLSContext),
@@ -221,8 +258,7 @@ CFlyRedisSession::CFlyRedisSession(boost::asio::io_context& boostIOContext, bool
 }
 #else
 CFlyRedisSession::CFlyRedisSession(boost::asio::io_context& boostIOContext)
-    :m_strRedisAddress(),
-    m_nMinSlot(0),
+    :m_nMinSlot(0),
     m_nMaxSlot(0),
     m_bIsMasterNode(false),
     m_hNetStream(boostIOContext),
@@ -239,17 +275,17 @@ CFlyRedisSession::~CFlyRedisSession()
 
 void CFlyRedisSession::SetRedisAddress(const std::string& strAddress)
 {
-    m_strRedisAddress = strAddress;
+    m_hNetStream.SetRedisAddress(strAddress);
 }
 
 const std::string& CFlyRedisSession::GetRedisAddr() const
 {
-    return m_strRedisAddress;
+    return m_hNetStream.GetRedisAddr();
 }
 
 bool CFlyRedisSession::Connect()
 {
-    return m_hNetStream.Connect(m_strRedisAddress);
+    return m_hNetStream.Connect();
 }
 
 bool CFlyRedisSession::AcceptHashSlot(int nSlot, bool bIsWrite, FlyRedisReadWriteType nFlyRedisReadWriteType) const
@@ -287,7 +323,7 @@ bool CFlyRedisSession::ResolveServerVersion()
     std::map<std::string, std::map<std::string, std::string> > mapSectionInfo;
     if (!INFO("Server", mapSectionInfo))
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "RedisNode %s Run INFO SERVER failed");
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "RedisNode %s Run INFO SERVER failed", GetRedisAddr().c_str());
         return false;
     }
     m_strRedisVersion = GetServerInfoSectionField(mapSectionInfo, "# Server", "redis_version");
@@ -311,7 +347,7 @@ bool CFlyRedisSession::AUTH(std::string& strPassword)
     vecRedisCmdParamList.push_back("AUTH");
     vecRedisCmdParamList.push_back(strPassword);
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, false);
+    CFlyRedis::BuildRedisCmdRequest(GetRedisAddr(), vecRedisCmdParamList, strRedisCmdRequest, false);
     if (!ProcRedisRequest(strRedisCmdRequest))
     {
         return false;
@@ -324,7 +360,7 @@ bool CFlyRedisSession::PING()
     std::vector<std::string> vecRedisCmdParamList;
     vecRedisCmdParamList.push_back("PING");
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, false);
+    CFlyRedis::BuildRedisCmdRequest(GetRedisAddr(), vecRedisCmdParamList, strRedisCmdRequest, false);
     if (!ProcRedisRequest(strRedisCmdRequest))
     {
         return false;
@@ -337,7 +373,7 @@ bool CFlyRedisSession::READONLY()
     std::vector<std::string> vecRedisCmdParamList;
     vecRedisCmdParamList.push_back("READONLY");
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, false);
+    CFlyRedis::BuildRedisCmdRequest(GetRedisAddr(), vecRedisCmdParamList, strRedisCmdRequest, false);
     if (!ProcRedisRequest(strRedisCmdRequest))
     {
         return false;
@@ -354,7 +390,7 @@ bool CFlyRedisSession::INFO(const std::string& strSection, std::map<std::string,
         vecRedisCmdParamList.push_back(strSection);
     }
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, false);
+    CFlyRedis::BuildRedisCmdRequest(GetRedisAddr(), vecRedisCmdParamList, strRedisCmdRequest, false);
     if (!ProcRedisRequest(strRedisCmdRequest))
     {
         return false;
@@ -410,7 +446,7 @@ bool CFlyRedisSession::CLUSTER_NODES(std::vector<std::string>& vecResult)
     vecRedisCmdParamList.push_back("CLUSTER");
     vecRedisCmdParamList.push_back("NODES");
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, false);
+    CFlyRedis::BuildRedisCmdRequest(GetRedisAddr(), vecRedisCmdParamList, strRedisCmdRequest, false);
     if (!ProcRedisRequest(strRedisCmdRequest))
     {
         return false;
@@ -426,7 +462,7 @@ bool CFlyRedisSession::SCRIPT_LOAD(const std::string& strScript, std::string& st
     vecRedisCmdParamList.push_back("LOAD");
     vecRedisCmdParamList.push_back(strScript);
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, false);
+    CFlyRedis::BuildRedisCmdRequest(GetRedisAddr(), vecRedisCmdParamList, strRedisCmdRequest, false);
     if (!ProcRedisRequest(strRedisCmdRequest))
     {
         return false;
@@ -441,7 +477,7 @@ bool CFlyRedisSession::SCRIPT_FLUSH()
     vecRedisCmdParamList.push_back("SCRIPT");
     vecRedisCmdParamList.push_back("FLUSH");
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, true);
+    CFlyRedis::BuildRedisCmdRequest(GetRedisAddr(), vecRedisCmdParamList, strRedisCmdRequest, true);
     if (!ProcRedisRequest(strRedisCmdRequest))
     {
         return false;
@@ -456,7 +492,7 @@ bool CFlyRedisSession::SCRIPT_EXISTS(const std::string& strSHA)
     vecRedisCmdParamList.push_back("EXISTS");
     vecRedisCmdParamList.push_back(strSHA);
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, false);
+    CFlyRedis::BuildRedisCmdRequest(GetRedisAddr(), vecRedisCmdParamList, strRedisCmdRequest, false);
     if (!ProcRedisRequest(strRedisCmdRequest))
     {
         return false;
@@ -474,7 +510,7 @@ bool CFlyRedisSession::HELLO(int nVersion)
     vecRedisCmdParamList.push_back("HELLO");
     vecRedisCmdParamList.push_back(std::to_string(nVersion));
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, false);
+    CFlyRedis::BuildRedisCmdRequest(GetRedisAddr(), vecRedisCmdParamList, strRedisCmdRequest, false);
     if (!ProcRedisRequest(strRedisCmdRequest))
     {
         return false;
@@ -504,7 +540,7 @@ bool CFlyRedisSession::HELLO_AUTH_SETNAME(int nVersion, const std::string& strUs
         vecRedisCmdParamList.push_back(strClientName);
     }
     std::string strRedisCmdRequest;
-    CFlyRedis::BuildRedisCmdRequest(m_strRedisAddress, vecRedisCmdParamList, strRedisCmdRequest, false);
+    CFlyRedis::BuildRedisCmdRequest(GetRedisAddr(), vecRedisCmdParamList, strRedisCmdRequest, false);
     if (!ProcRedisRequest(strRedisCmdRequest))
     {
         return false;
@@ -570,7 +606,7 @@ bool CFlyRedisSession::RecvRedisResponse()
         bResult = ReadRedisResponseAttribute();
         break;
     default:
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "Unknown HeadCharacter, [%s], Char: [%s]", m_strRedisAddress.c_str(), std::to_string(chHead).c_str());
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "Unknown HeadCharacter, %s, Char: %s", GetRedisAddr().c_str(), std::to_string(chHead).c_str());
         break;
     }
     return bResult;
@@ -582,7 +618,7 @@ bool CFlyRedisSession::ReadRedisResponseError()
     {
         return false;
     }
-    CFlyRedis::Logger(FlyRedisLogLevel::Error, "RedisResponseError: [%s]", m_stRedisResponse.strRedisResponse.c_str());
+    CFlyRedis::Logger(FlyRedisLogLevel::Error, "RedisResponseError %s", m_stRedisResponse.strRedisResponse.c_str());
     m_bRedisResponseError = true;
     return true;
 }
@@ -794,14 +830,14 @@ bool CFlyRedisSession::ReadRedisResponseVarLenString()
     }
     if (nLen < 0)
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "Len LessThan 0: [%s]", m_stRedisResponse.strRedisResponse.c_str());
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "Len LessThan 0: %s", m_stRedisResponse.strRedisResponse.c_str());
         return false;
     }
     // If BulkStrings over than 512M, just return false. according the Redis document, the max length should be 512M
     // Just for safe
     if (nLen >= 1024 * 1024 * 512)
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "Len OverThan 512M: [%s]", m_stRedisResponse.strRedisResponse.c_str());
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "Len OverThan 512M: %s", m_stRedisResponse.strRedisResponse.c_str());
         return false;
     }
     // Length: 2 char for \r\n
@@ -868,12 +904,19 @@ CFlyRedisClient::CFlyRedisClient()
     m_bUseTLSFlag(false),
     m_boostTLSContext(boost::asio::ssl::context::sslv23_client),
 #endif // FLY_REDIS_ENABLE_TLS
+    m_nReadTimeoutSeconds(5),
+    m_strRedisAddress(),
+    m_setRedisAddressSeed(),
+    m_strRedisPasswod(),
     m_bClusterFlag(false),
     m_nFlyRedisClusterDetectType(FlyRedisClusterDetectType::AutoDetect),
     m_nFlyRedisReadWriteType(FlyRedisReadWriteType::ReadWriteOnMaster),
     m_pCurRedisSession(nullptr),
+    m_mapRedisSession(),
     m_nRedisNodeCount(0),
-    m_bHasBadRedisSession(false)
+    m_bHasBadRedisSession(false),
+    m_vecRedisCmdParamList(),
+    m_strRedisCmdRequest()
 {
 }
 
@@ -888,6 +931,11 @@ void CFlyRedisClient::SetRedisConfig(const std::string& strRedisAddress, const s
     m_strRedisPasswod = strPassword;
 }
 
+void CFlyRedisClient::SetReadTimeoutSeconds(int nSeconds)
+{
+    m_nReadTimeoutSeconds = nSeconds;
+}
+
 void CFlyRedisClient::SetRedisReadWriteType(FlyRedisReadWriteType nFlyRedisReadWriteType)
 {
     m_nFlyRedisReadWriteType = nFlyRedisReadWriteType;
@@ -898,7 +946,6 @@ void CFlyRedisClient::SetRedisClusterDetectType(FlyRedisClusterDetectType nFlyRe
     m_nFlyRedisClusterDetectType = nFlyRedisClusterDetectType;
 }
 
-#ifdef FLY_REDIS_ENABLE_TLS
 bool CFlyRedisClient::SetTLSContext(const std::string& strTLSCert, const std::string& strTLSKey, const std::string& strTLSCACert)
 {
     return SetTLSContext(strTLSCert, strTLSKey, strTLSCACert, "");
@@ -906,6 +953,7 @@ bool CFlyRedisClient::SetTLSContext(const std::string& strTLSCert, const std::st
 
 bool CFlyRedisClient::SetTLSContext(const std::string& strTLSCert, const std::string& strTLSKey, const std::string& strTLSCACert, const std::string& strTLSCACertDir)
 {
+#ifdef FLY_REDIS_ENABLE_TLS
     m_bUseTLSFlag = true;
     boost::system::error_code boostErrorCode;
     m_boostTLSContext.set_options(boost::asio::ssl::context::no_sslv2 | boost::asio::ssl::context::no_sslv3, boostErrorCode);
@@ -948,8 +996,11 @@ bool CFlyRedisClient::SetTLSContext(const std::string& strTLSCert, const std::st
         return false;
     }
     return true;
-}
+#else
+    CFlyRedis::Logger(FlyRedisLogLevel::Error, "TLS Is Disable, %s, %s, %s", strTLSCert.c_str(), strTLSKey.c_str(), strTLSCACert.c_str(), strTLSCACertDir.c_str());
+    return false;
 #endif // FLY_REDIS_ENABLE_TLS
+}
 
 bool CFlyRedisClient::Open()
 {
@@ -2750,7 +2801,7 @@ bool CFlyRedisClient::ResolveRedisSession(const std::string& strKey, bool bIsWri
     }
     if (nullptr == m_pCurRedisSession && m_nFlyRedisReadWriteType == FlyRedisReadWriteType::ReadOnSlaveWriteOnMaster && !bIsWrite)
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Warning, "SlaveFailedSoRedirToMaster: [%s]", strKey.c_str());
+        CFlyRedis::Logger(FlyRedisLogLevel::Warning, "SlaveFailedSoRedirToMaster %s", strKey.c_str());
         for (auto& kvp : m_mapRedisSession)
         {
             CFlyRedisSession* pRedisSession = kvp.second;
@@ -2787,13 +2838,13 @@ bool CFlyRedisClient::ConnectToEveryRedisNode()
         RedisClusterNodesLine stRedisClusterNodesLine;
         if (!stRedisClusterNodesLine.ParseNodeLine(strNodeLine))
         {
-            CFlyRedis::Logger(FlyRedisLogLevel::Error, "NodeLineInvalid: [%s]", strNodeLine.c_str());
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "NodeLineInvalid %s", strNodeLine.c_str());
             bResult = false;
             break;
         }
         if (!mapRedisClusterNodesLine.insert(std::make_pair(stRedisClusterNodesLine.strNodeId, stRedisClusterNodesLine)).second)
         {
-            CFlyRedis::Logger(FlyRedisLogLevel::Error, "RedisNodeIdReduplicated: [%s]", strNodeLine.c_str());
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "RedisNodeIdReduplicated %s", strNodeLine.c_str());
             bResult = false;
             break;
         }
@@ -2818,7 +2869,7 @@ bool CFlyRedisClient::ConnectToEveryRedisNode()
             auto itFindMaster = mapRedisClusterNodesLine.find(refRedisNode.strMasterNodeId);
             if (itFindMaster == mapRedisClusterNodesLine.end())
             {
-                CFlyRedis::Logger(FlyRedisLogLevel::Error, "SlaveHasNoMaster: [%s]", kvp.first.c_str());
+                CFlyRedis::Logger(FlyRedisLogLevel::Error, "SlaveHasNoMaster %s", kvp.first.c_str());
                 bResult = false;
                 break;
             }
@@ -2828,7 +2879,7 @@ bool CFlyRedisClient::ConnectToEveryRedisNode()
         }
         if (!ConnectToOneClusterNode(refRedisNode))
         {
-            CFlyRedis::Logger(FlyRedisLogLevel::Error, "ConnectToClusterNodesLineFailed: [%s-%s]", kvp.first.c_str(), refRedisNode.strNodeIPPort.c_str());
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "ConnectToClusterNodesLineFailed %s-%s", kvp.first.c_str(), refRedisNode.strNodeIPPort.c_str());
             bResult = false;
             continue;
         }
@@ -2841,7 +2892,7 @@ bool CFlyRedisClient::ConnectToOneClusterNode(const RedisClusterNodesLine& stRed
     CFlyRedisSession* pRedisSession = CreateRedisSession(stRedisNode.strNodeIPPort);
     if (nullptr == pRedisSession)
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "CreateRedisSessionFailed: [%s]", stRedisNode.strNodeIPPort.c_str());
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "CreateRedisSessionFailed %s", stRedisNode.strNodeIPPort.c_str());
         return false;
     }
     pRedisSession->SetSelfSlotRange(stRedisNode.nMinSlot, stRedisNode.nMaxSlot);
@@ -2867,6 +2918,7 @@ CFlyRedisSession* CFlyRedisClient::CreateRedisSession(const std::string& strRedi
     CFlyRedisSession* pRedisSession = new CFlyRedisSession(m_boostIOContext);
 #endif // FLY_REDIS_ENABLE_TLS
     pRedisSession->SetRedisAddress(strRedisAddress);
+    pRedisSession->SetReadTimeoutSeconds(m_nReadTimeoutSeconds);
     if (!pRedisSession->Connect())
     {
         delete pRedisSession;
@@ -2898,7 +2950,7 @@ void CFlyRedisClient::DestroyRedisSession(CFlyRedisSession* pRedisSession)
     }
     if (nullptr != pRedisSession)
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Debug, "DestroyRedisSession: [%s]", pRedisSession->GetRedisAddr().c_str());
+        CFlyRedis::Logger(FlyRedisLogLevel::Debug, "DestroyRedisSession %s", pRedisSession->GetRedisAddr().c_str());
         m_mapRedisSession.erase(pRedisSession->GetRedisAddr());
         delete pRedisSession;
         pRedisSession = nullptr;
@@ -2921,7 +2973,7 @@ void CFlyRedisClient::PingEveryRedisNode(std::vector<CFlyRedisSession*>& vecDead
         CFlyRedisSession* pRedisSession = kvp.second;
         if (nullptr != pRedisSession && !pRedisSession->PING())
         {
-            CFlyRedis::Logger(FlyRedisLogLevel::Warning, "RedisNode: [%s] PingFailed", pRedisSession->GetRedisAddr().c_str());
+            CFlyRedis::Logger(FlyRedisLogLevel::Warning, "RedisNode %s PingFailed", pRedisSession->GetRedisAddr().c_str());
             vecDeadRedisSession.push_back(pRedisSession);
         }
     }
@@ -2940,7 +2992,7 @@ bool CFlyRedisClient::DeliverRedisCmd(const std::string& strKey, bool bIsWrite, 
     }
     if (nullptr == m_pCurRedisSession)
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "CurRedisSessionIsNull: [%s]", pszCaller);
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "CurRedisSessionIsNull %s", pszCaller);
         m_bHasBadRedisSession = true;
         return false;
     }
@@ -2948,7 +3000,7 @@ bool CFlyRedisClient::DeliverRedisCmd(const std::string& strKey, bool bIsWrite, 
     CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr(), m_vecRedisCmdParamList, m_strRedisCmdRequest, bIsWrite);
     if (!m_pCurRedisSession->ProcRedisRequest(m_strRedisCmdRequest))
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "ProcRedisRequestFailed: [%s]", pszCaller);
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "ProcRedisRequestFailed %s", pszCaller);
         m_bHasBadRedisSession = true;
         return false;
     }
@@ -3038,7 +3090,7 @@ bool CFlyRedisClient::RunRedisCmdOnResponseKVP(const std::string& strKey, bool b
     int nLineCount = (int)vecRedisResponse.size();
     if (nLineCount % 2 != 0)
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "ResponseLineCountIsNotEven, [%d]", nLineCount);
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "ResponseLineCountIsNotEven %d", nLineCount);
         return false;
     }
     bool bResult = true;
@@ -3050,7 +3102,7 @@ bool CFlyRedisClient::RunRedisCmdOnResponseKVP(const std::string& strKey, bool b
         const std::string& strValue = vecRedisResponse[nValueIndex];
         if (!mapResult.insert(std::make_pair(strField, strValue)).second)
         {
-            CFlyRedis::Logger(FlyRedisLogLevel::Error, "ResponseLineReduplicateField, [%s]", pszCaller);
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "ResponseLineReduplicateField %s", pszCaller);
             bResult = false;
             break;
         }
@@ -3068,7 +3120,7 @@ bool CFlyRedisClient::RunRedisCmdOnResponsePairList(const std::string& strKey, b
     int nLineCount = (int)vecRedisResponse.size();
     if (nLineCount % 2 != 0)
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "ResponseLineCountIsNotEven, [%d]", nLineCount);
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "ResponseLineCountIsNotEven %d", nLineCount);
         return false;
     }
     int nKeyIndex = 0;
@@ -3393,7 +3445,7 @@ bool CFlyRedisClient::RedisClusterNodesLine::ParseNodeLine(const std::string& st
     std::vector<std::string> vecNodeField = CFlyRedis::SplitString(strNodeLine, ' ');
     if ((bIsMaster && vecNodeField.size() != 9) || (!bIsMaster && vecNodeField.size() != 8))
     {
-        CFlyRedis::Logger(FlyRedisLogLevel::Error, "NodeFieldInvalid: [%s]", strNodeLine.c_str());
+        CFlyRedis::Logger(FlyRedisLogLevel::Error, "NodeFieldInvalid %s", strNodeLine.c_str());
         return false;
     }
     strNodeId = vecNodeField[0];
@@ -3409,14 +3461,14 @@ bool CFlyRedisClient::RedisClusterNodesLine::ParseNodeLine(const std::string& st
         std::vector<std::string> vecIntField = CFlyRedis::SplitString(strSlotRange, '-');
         if (vecIntField.size() != 2)
         {
-            CFlyRedis::Logger(FlyRedisLogLevel::Error, "InvalidFieldLen: [%s] Slot: [%s]", strNodeIPPort.c_str(), strSlotRange.c_str());
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "InvalidFieldLen %s Slot %s", strNodeIPPort.c_str(), strSlotRange.c_str());
             return false;
         }
         nMinSlot = atoi(vecIntField[0].c_str());
         nMaxSlot = atoi(vecIntField[1].c_str());
         if (nMinSlot > nMaxSlot)
         {
-            CFlyRedis::Logger(FlyRedisLogLevel::Error, "InvalidSlotValue: [%s] Slot: [%s]", strNodeIPPort.c_str(), strSlotRange.c_str());
+            CFlyRedis::Logger(FlyRedisLogLevel::Error, "InvalidSlotValue %s Slot %s", strNodeIPPort.c_str(), strSlotRange.c_str());
             return false;
         }
     }

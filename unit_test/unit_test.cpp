@@ -9,10 +9,17 @@ void Logger(const char* pszLog)
     printf("%s\n", pszLog);
 }
 
-const std::string CONFIG_REDIS_ADDR = "127.0.0.1:1000";
-std::string CONFIG_REDIS_PASSWORD = "";
+#ifdef FLY_REDIS_ENABLE_TLS
+const std::string CONFIG_REDIS_ADDR = "192.168.1.10:2000";
+std::string CONFIG_REDIS_PASSWORD = "123456";
 bool CONFIG_USE_TLS = true;
 int CONFIG_RESP_VER = 3; // RESP should be 2 or 3
+#else
+const std::string CONFIG_REDIS_ADDR = "192.168.1.10:1000";
+std::string CONFIG_REDIS_PASSWORD = "123456";
+bool CONFIG_USE_TLS = false;
+int CONFIG_RESP_VER = 3; // RESP should be 2 or 3
+#endif // FLY_REDIS_ENABLE_TLS
 
 #define CREATE_REDIS_CLIENT() \
     CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Error, Logger); \
@@ -20,7 +27,7 @@ int CONFIG_RESP_VER = 3; // RESP should be 2 or 3
     CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Notice, Logger); \
     CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Command, Logger); \
     CFlyRedisClient* pFlyRedisClient = new CFlyRedisClient(); \
-    if (CONFIG_USE_TLS && !pFlyRedisClient->SetTLSContext("redis.crt", "redis.key", "ca.crt", "")) { return; }\
+    if (CONFIG_USE_TLS && !pFlyRedisClient->SetTLSContext("./tls/redis.crt", "./tls/redis.key", "./tls/ca.crt", "")) { return; }\
     pFlyRedisClient->SetRedisConfig(CONFIG_REDIS_ADDR, CONFIG_REDIS_PASSWORD); \
     BOOST_CHECK(pFlyRedisClient->Open()); \
     pFlyRedisClient->HELLO(CONFIG_RESP_VER);
@@ -694,9 +701,9 @@ BOOST_AUTO_TEST_CASE(ACL_CMD)
 
     BOOST_CHECK(pFlyRedisClient->ACL_LOG(vecResult));
 
-    BOOST_CHECK(pFlyRedisClient->ACL_SAVE());
+    //BOOST_CHECK(pFlyRedisClient->ACL_SAVE());
 
-    BOOST_CHECK(pFlyRedisClient->ACL_LOAD());
+    //BOOST_CHECK(pFlyRedisClient->ACL_LOAD());
 
     DESTROY_REDIS_CLIENT();
 }

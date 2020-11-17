@@ -1,9 +1,31 @@
 #include "FlyRedis/FlyRedis.h"
 #include "boost/thread.hpp"
 
-void Logger(const char* pszMsg)
+void Logger(const char* pszLevel, const char* pszMsg)
 {
-    printf("%s\n", pszMsg);
+    int nCurTime = (int)time(nullptr);
+    printf("%d - %s - %s\n", nCurTime, pszLevel, pszMsg);
+}
+
+void LoggerDebug(const char* pszMsg)
+{
+    Logger("Debug", pszMsg);
+}
+void LoggerNotice(const char* pszMsg)
+{
+    Logger("Notice", pszMsg);
+}
+void LoggerError(const char* pszMsg)
+{
+    Logger("Error", pszMsg);
+}
+void LoggerWarning(const char* pszMsg)
+{
+    Logger("Warning", pszMsg);
+}
+void LoggerCommand(const char* pszMsg)
+{
+    Logger("Command", pszMsg);
 }
 
 void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword, bool bUseTLSFlag)
@@ -11,10 +33,19 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword, bool 
     CFlyRedisClient hFlyRedisClient;
     hFlyRedisClient.SetRedisConfig(strRedisAddr, strPassword);
     hFlyRedisClient.SetRedisReadWriteType(FlyRedisReadWriteType::ReadWriteOnMaster);
-    if (bUseTLSFlag && !hFlyRedisClient.SetTLSContext("redis.crt", "redis.key", "ca.crt", ""))
+    hFlyRedisClient.SetReadTimeoutSeconds(60);
+#ifdef FLY_REDIS_ENABLE_TLS
+    if (bUseTLSFlag && !hFlyRedisClient.SetTLSContext("./tls/redis.crt", "./tls/redis.key", "./tls/ca.crt", ""))
     {
         return;
     }
+#else
+    if (bUseTLSFlag)
+    {
+        LoggerError("TLS Not Enable, Please Define Macro FLY_REDIS_ENABLE_TLS When Compile");
+        return;
+    }
+#endif // FLY_REDIS_ENABLE_TLS
     //hFlyRedisClient.SetRedisClusterDetectType(FlyRedisClusterDetectType::DisableCluster);
     if (!hFlyRedisClient.Open())
     {
@@ -45,22 +76,22 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword, bool 
     {
         if (i % 100 == 0)
         {
-            printf("%d\n", i);
+            LoggerNotice(std::to_string(i).c_str());
         }
         strKey = "key_" + std::to_string(i);
         if (!hFlyRedisClient.SET(strKey, "value"))
         {
-            Logger("SET FAILED");
+            LoggerError("SET FAILED");
             continue;
         }
         if (!hFlyRedisClient.GET(strKey, stRedisResponse.strRedisResponse))
         {
-            Logger("GET FAILED");
+            LoggerError("GET FAILED");
             continue;
         }
         if (!hFlyRedisClient.DEL(strKey, nResult))
         {
-            Logger("DEL FAILED");
+            LoggerError("DEL FAILED");
             continue;
         }
         strKey = "hashkey_" + std::to_string(i);
@@ -69,17 +100,17 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword, bool 
             std::string strHashField = "field_" + std::to_string(j);
             if (!hFlyRedisClient.HSET(strKey, strHashField, "value", nResult))
             {
-                Logger("HSET FAILED");
+                LoggerError("HSET FAILED");
                 continue;
             }
             if (!hFlyRedisClient.HGET(strKey, strHashField, stRedisResponse.strRedisResponse))
             {
-                Logger("HGET FAILED");
+                LoggerError("HGET FAILED");
                 continue;
             }
             if (!hFlyRedisClient.HGETALL(strKey, stRedisResponse.mapRedisResponse))
             {
-                Logger("HGET FAILED");
+                LoggerError("HGET FAILED");
                 continue;
             }
         }
@@ -89,44 +120,47 @@ void ThreadTestFlyRedis(std::string strRedisAddr, std::string strPassword, bool 
             std::string strValue = "sval_" + std::to_string(j);
             if (!hFlyRedisClient.SADD(strKey, strValue, nResult))
             {
-                Logger("SADD FAILED");
+                LoggerError("SADD FAILED");
                 continue;
             }
             if (!hFlyRedisClient.SMEMBERS(strKey, stRedisResponse.setRedisResponse))
             {
-                Logger("SMEMBERS FAILED");
+                LoggerError("SMEMBERS FAILED");
                 continue;
             }
         }
     }
     time_t nElapsedTime = time(nullptr) - nBeginTime;
-    Logger(("TimeCost: " + std::to_string(nElapsedTime)).c_str());
+    LoggerNotice(("TimeCost: " + std::to_string(nElapsedTime)).c_str());
 }
 
 int main(int argc, char* argv[])
 {
+    // ./sample 192.168.1.10:1000 123456 tls 1
+    // Start Redis server enable tls
+    // redis-server --tls-port 2000 --port 1000 --tls-cert-file ./tests/tls/redis.crt --tls-key-file ./tests/tls/redis.key --tls-ca-cert-file ./tests/tls/ca.crt --bind 192.168.1.10 --requirepass 123455
     if (argc != 5)
     {
-        // Param: 127.0.0.1:8000 123456 1
-        Logger("sample redis_ip:redis_port redis_password enable_tls thread_count");
+        // Param: 127.0.0.1:8000 123456 tls 1
+        printf("sample redis_ip:redis_port redis_password enable_tls thread_count\n");
         return -1;
     }
     std::string strRedisAddr = argv[1];
     std::string strPassword = argv[2];
-    bool bUseTLSFlag = (1 == atoi(argv[3]));
+    bool bUseTLSFlag = (0 == strcmp("tls", argv[3]));
     int nThreadCount = atoi(argv[4]);
     // Config FlyRedis, but it's not not necessary
-    //CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Debug, Logger);
-    //CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Notice, Logger);
-    //CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Error, Logger);
-    //CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Warning, Logger);
-    //CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Command, Logger);
+    CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Debug, LoggerDebug);
+    CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Notice, LoggerNotice);
+    CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Error, LoggerError);
+    CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Warning, LoggerWarning);
+    //CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Command, LoggerCommand);
     boost::thread_group tg;
     for (int i = 0; i < nThreadCount; ++i)
     {
         tg.create_thread(boost::bind(ThreadTestFlyRedis, strRedisAddr, strPassword, bUseTLSFlag));
     }
     tg.join_all();
-    Logger("Done Test");
+    LoggerNotice("Done Test");
     return 0;
 }
