@@ -330,9 +330,9 @@ bool CFlyRedisSession::TrySendRedisRequest(const std::string& strRedisCmdRequest
     return true;
 }
 
-bool CFlyRedisSession::TryRecvRedisResponse(int nBlcokMS)
+bool CFlyRedisSession::TryRecvRedisResponse(int nBlockMS)
 {
-    if (!m_hNetStream.ReadByTime(nBlcokMS))
+    if (!m_hNetStream.ReadByTime(nBlockMS))
     {
         return false;
     }

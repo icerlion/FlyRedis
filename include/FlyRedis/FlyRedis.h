@@ -204,7 +204,7 @@ public:
 
     // Try send/recv redis response
     bool TrySendRedisRequest(const std::string& strRedisCmdRequest);
-    bool TryRecvRedisResponse(int nBlcokMS);
+    bool TryRecvRedisResponse(int nBlockMS);
 
     // Return true if resolve server version success
     bool ResolveServerVersion();
