@@ -61,8 +61,13 @@ public:
     }
 
     bool Connect();
-    
-    bool Read(int nExpectedLen);
+
+    bool ReadByLength(int nExpectedLen);
+
+    inline int GlobalRecvBuffLen() const
+    {
+        return static_cast<int>(m_strGlobalRecvBuff.length());
+    }
 
     bool Write(const char* buffWrite, size_t nBuffLen);
 
@@ -129,10 +134,9 @@ enum class FlyRedisClusterDetectType : int
 
 //////////////////////////////////////////////////////////////////////////
 // Define FlyRedisSession, Describe TCP session to one redis server node.
-using RedisResponse = struct RedisResponse;
-struct RedisResponse
+struct FlyRedisResponse
 {
-    RedisResponse()
+    FlyRedisResponse()
         :strRedisResponse(),
         vecRedisResponse(),
         mapRedisResponse(),
@@ -208,18 +212,26 @@ public:
     // Return true if cluster enable
     bool GetClusterEnabledFlag();
 
+    inline void ResetRedisResponse()
+    {
+        m_stRedisResponse.Reset();
+    }
+
     inline std::string& GetRedisResponseString()
     {
         return m_stRedisResponse.strRedisResponse;
     }
+
     inline std::vector<std::string>& GetRedisResponseVector()
     {
         return m_stRedisResponse.vecRedisResponse;
     }
+
     inline std::set<std::string>& GetRedisResponseSet()
     {
         return m_stRedisResponse.setRedisResponse;
     }
+
     inline std::map<std::string, std::string>& GetRedisResponseMap()
     {
         return m_stRedisResponse.mapRedisResponse;
@@ -227,7 +239,7 @@ public:
 
     //////////////////////////////////////////////////////////////////////////
     /// Begin of RedisCmd
-    bool AUTH(std::string& strPassword);
+    bool AUTH(const std::string& strPassword);
     bool PING();
     bool READONLY();
     bool INFO(const std::string& strSection, std::map<std::string, std::map<std::string, std::string> >& mapSectionInfo);
@@ -285,7 +297,7 @@ private:
     int m_nRESPVersion;
     //////////////////////////////////////////////////////////////////////////
     // Last Response of this redis session
-    RedisResponse m_stRedisResponse;
+    FlyRedisResponse m_stRedisResponse;
 };
 //////////////////////////////////////////////////////////////////////////
 // Define RedisClient, Describe full connection to redis server, it will connect to every redis master node
@@ -322,6 +334,7 @@ public:
 
     // Fetch redis node list
     void FetchRedisNodeList(std::vector<std::string>& vecRedisNodeList) const;
+    std::vector<std::string> FetchRedisNodeList() const;
 
     // Chose current redis node
     bool ChoseCurRedisNode(const std::string& strNodeAddr);

@@ -73,7 +73,7 @@ bool CFlyRedisNetStream::Connect()
     return ConnectAsTCP(boostEndPoints);
 }
 
-bool CFlyRedisNetStream::Read(int nExpectedLen)
+bool CFlyRedisNetStream::ReadByLength(int nExpectedLen)
 {
     if ((int)m_strGlobalRecvBuff.length() >= nExpectedLen)
     {
@@ -341,7 +341,7 @@ bool CFlyRedisSession::GetClusterEnabledFlag()
     return (0 == strClusterEnabled.compare("1"));
 }
 
-bool CFlyRedisSession::AUTH(std::string& strPassword)
+bool CFlyRedisSession::AUTH(const std::string& strPassword)
 {
     std::vector<std::string> vecRedisCmdParamList;
     vecRedisCmdParamList.push_back("AUTH");
@@ -551,7 +551,7 @@ bool CFlyRedisSession::HELLO_AUTH_SETNAME(int nVersion, const std::string& strUs
 
 bool CFlyRedisSession::RecvRedisResponse()
 {
-    if (!m_hNetStream.Read(1))
+    if (!m_hNetStream.ReadByLength(1))
     {
         return false;
     }
@@ -792,7 +792,7 @@ bool CFlyRedisSession::ReadUntilCRLF()
     char chPreValue = 0;
     while (true)
     {
-        if (!m_hNetStream.Read(1))
+        if (!m_hNetStream.ReadByLength(1))
         {
             bResult = false;
             break;
@@ -842,7 +842,7 @@ bool CFlyRedisSession::ReadRedisResponseVarLenString()
     }
     // Length: 2 char for \r\n
     m_stRedisResponse.strRedisResponse.clear();
-    if (!m_hNetStream.Read(nLen))
+    if (!m_hNetStream.ReadByLength(nLen))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "NetStream Read %d Failed", nLen);
         return false;
@@ -853,7 +853,7 @@ bool CFlyRedisSession::ReadRedisResponseVarLenString()
         return false;
     }
     // Read tail CRLF to make stream empty
-    if (!m_hNetStream.Read(2))
+    if (!m_hNetStream.ReadByLength(2))
     {
         return false;
     }
@@ -1065,6 +1065,17 @@ void CFlyRedisClient::FetchRedisNodeList(std::vector<std::string>& vecRedisNodeL
     {
         vecRedisNodeList.push_back(kvp.first);
     }
+}
+
+std::vector<std::string> CFlyRedisClient::FetchRedisNodeList() const
+{
+    std::vector<std::string> vecRedisNodeList;
+    vecRedisNodeList.reserve(m_mapRedisSession.size());
+    for (auto& kvp : m_mapRedisSession)
+    {
+        vecRedisNodeList.push_back(kvp.first);
+    }
+    return vecRedisNodeList;
 }
 
 bool CFlyRedisClient::ChoseCurRedisNode(const std::string& strNodeAddr)
