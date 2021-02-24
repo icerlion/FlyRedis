@@ -306,6 +306,22 @@ private:
     FlyRedisResponse m_stRedisResponse;
 };
 //////////////////////////////////////////////////////////////////////////
+using FlyRedisSubscribeResponse = struct FlyRedisSubscribeResponse;
+struct FlyRedisSubscribeResponse
+{
+    std::string strCmd;
+    std::string strChannel;
+    std::string strMsg;
+};
+using FlyRedisPMessageResponse = struct FlyRedisPMessageResponse;
+struct FlyRedisPMessageResponse
+{
+    std::string strCmd;
+    std::string strPattern;
+    std::string strChannel;
+    std::string strMsg;
+};
+//////////////////////////////////////////////////////////////////////////
 // Define RedisClient, Describe full connection to redis server, it will connect to every redis master node
 class CFlyRedisClient
 {
