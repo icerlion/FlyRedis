@@ -79,18 +79,12 @@ bool CFlyRedisNetStream::ReadByLength(int nExpectedLen)
     {
         return true;
     }
-    boost::system::error_code boostErrorCode;
     time_t nExpiredTime = time(nullptr) + m_nReadTimeoutSeconds;
     while (time(nullptr) < nExpiredTime)
     {
         m_boostIOContext.restart();
         StartAsyncRead();
         m_boostIOContext.run_for(std::chrono::milliseconds(50));
-        if (boostErrorCode)
-        {
-            CFlyRedis::Logger(FlyRedisLogLevel::Error, "Boost Pool Error %d-%s", boostErrorCode.value(), boostErrorCode.message().c_str());
-            break;
-        }
         if ((int)m_strGlobalRecvBuff.length() >= nExpectedLen)
         {
             break;
@@ -102,6 +96,14 @@ bool CFlyRedisNetStream::ReadByLength(int nExpectedLen)
         return false;
     }
     return true;
+}
+
+bool CFlyRedisNetStream::ReadByTime(int nBlockMS)
+{
+    m_boostIOContext.restart();
+    StartAsyncRead();
+    m_boostIOContext.run_for(std::chrono::milliseconds(nBlockMS));
+    return !m_strGlobalRecvBuff.empty();
 }
 
 bool CFlyRedisNetStream::Write(const char* buffWrite, size_t nBuffLen)
@@ -315,6 +317,35 @@ bool CFlyRedisSession::ProcRedisRequest(const std::string& strRedisCmdRequest)
         return false;
     }
     return !m_bRedisResponseError;
+}
+
+
+bool CFlyRedisSession::TrySendRedisRequest(const std::string& strRedisCmdRequest)
+{
+    // Build RedisCmdRequest String
+    m_stRedisResponse.Reset();
+    m_bRedisResponseError = false;
+    // Send Msg To RedisServer
+    m_hNetStream.Write(strRedisCmdRequest.c_str(), strRedisCmdRequest.length());
+    return true;
+}
+
+bool CFlyRedisSession::TryRecvRedisResponse(int nBlcokMS)
+{
+    if (!m_hNetStream.ReadByTime(nBlcokMS))
+    {
+        return false;
+    }
+    bool bResult = true;
+    while (m_hNetStream.GlobalRecvBuffLen() > 0)
+    {
+        if (!RecvRedisResponse())
+        {
+            bResult = false;
+            break;
+        }
+    }
+    return bResult && !m_bRedisResponseError;
 }
 
 bool CFlyRedisSession::ResolveServerVersion()
@@ -1117,6 +1148,17 @@ bool CFlyRedisClient::HELLO_AUTH_SETNAME(int nRESPVersion, const std::string& st
         }
     }
     return bResult;
+}
+
+bool CFlyRedisClient::PING(const std::string& strMsg, std::string& strResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("PING");
+    if (!strMsg.empty())
+    {
+        m_vecRedisCmdParamList.push_back(strMsg);
+    }
+    return RunRedisCmdOnOneLineResponseString("", false, strResult, __FUNCTION__);
 }
 
 bool CFlyRedisClient::ACL_CAT(std::vector<std::string>& vecResult)

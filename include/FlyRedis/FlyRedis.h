@@ -64,6 +64,8 @@ public:
 
     bool ReadByLength(int nExpectedLen);
 
+    bool ReadByTime(int nBlockMS);
+
     inline int GlobalRecvBuffLen() const
     {
         return static_cast<int>(m_strGlobalRecvBuff.length());
@@ -199,6 +201,10 @@ public:
 
     // Process redis cmd request
     bool ProcRedisRequest(const std::string& strRedisCmdRequest);
+
+    // Try send/recv redis response
+    bool TrySendRedisRequest(const std::string& strRedisCmdRequest);
+    bool TryRecvRedisResponse(int nBlcokMS);
 
     // Return true if resolve server version success
     bool ResolveServerVersion();
@@ -343,6 +349,8 @@ public:
     /// Begin of RedisCmd
     void HELLO(int nRESPVersion);
     bool HELLO_AUTH_SETNAME(int nRESPVersion, const std::string& strUserName, const std::string& strPassword, const std::string& strClientName);
+
+    bool PING(const std::string& strMsg, std::string& strResult);
 
     bool ACL_CAT(std::vector<std::string>& vecResult);
     bool ACL_CAT(const std::string& strParam, std::vector<std::string>& vecResult);
