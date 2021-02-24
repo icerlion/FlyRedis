@@ -319,7 +319,6 @@ bool CFlyRedisSession::ProcRedisRequest(const std::string& strRedisCmdRequest)
     return !m_bRedisResponseError;
 }
 
-
 bool CFlyRedisSession::TrySendRedisRequest(const std::string& strRedisCmdRequest)
 {
     // Build RedisCmdRequest String
@@ -1101,11 +1100,7 @@ void CFlyRedisClient::FetchRedisNodeList(std::vector<std::string>& vecRedisNodeL
 std::vector<std::string> CFlyRedisClient::FetchRedisNodeList() const
 {
     std::vector<std::string> vecRedisNodeList;
-    vecRedisNodeList.reserve(m_mapRedisSession.size());
-    for (auto& kvp : m_mapRedisSession)
-    {
-        vecRedisNodeList.push_back(kvp.first);
-    }
+    FetchRedisNodeList(vecRedisNodeList);
     return vecRedisNodeList;
 }
 
@@ -1578,15 +1573,10 @@ bool CFlyRedisClient::MGET(const std::vector<std::string>& vecKey, std::vector<s
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("MGET");
     m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecKey.begin(), vecKey.end());
-    if (!DeliverRedisCmd(vecKey.front(), false, __FUNCTION__))
+    if (!RunRedisCmdOnOneLineResponseVector(vecKey.front(), false, vecResult, __FUNCTION__))
     {
         return false;
     }
-    if (nullptr == m_pCurRedisSession)
-    {
-        return false;
-    }
-    vecResult.swap(m_pCurRedisSession->GetRedisResponseVector());
     return vecResult.size() == vecKey.size();
 }
 
