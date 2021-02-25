@@ -2761,6 +2761,183 @@ bool CFlyRedisClient::SUNIONSTORE(const std::string& strDestKey, const std::vect
     return RunRedisCmdOnOneLineResponseInt(strDestKey, true, nResult, __FUNCTION__);
 }
 
+bool CFlyRedisClient::PUBLISH(const std::string& strChannel, const std::string& strMsg, int& nResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("PUBLISH");
+    m_vecRedisCmdParamList.push_back(strChannel);
+    m_vecRedisCmdParamList.push_back(strMsg);
+    return RunRedisCmdOnOneLineResponseInt("", true, nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::UNSUBSCRIBE(const std::string& strChannel, std::vector<std::string>& vecResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("UNSUBSCRIBE");
+    if (!strChannel.empty())
+    {
+        m_vecRedisCmdParamList.push_back(strChannel);
+    }
+    return RunRedisCmdOnOneLineResponseVector("", true, vecResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::UNSUBSCRIBE(std::vector<std::string>& vecResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("UNSUBSCRIBE");
+    return RunRedisCmdOnOneLineResponseVector("", true, vecResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::PUNSUBSCRIBE(const std::string& strPattern, std::vector<std::string>& vecResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("PUNSUBSCRIBE");
+    m_vecRedisCmdParamList.push_back(strPattern);
+    return RunRedisCmdOnOneLineResponseVector("", true, vecResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::PUBSUB_CHANNELS(const std::string& strPattern, std::vector<std::string>& vecResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("PUBSUB");
+    m_vecRedisCmdParamList.push_back("CHANNELS");
+    if (!strPattern.empty())
+    {
+        m_vecRedisCmdParamList.push_back(strPattern);
+    }
+    return RunRedisCmdOnOneLineResponseVector("", true, vecResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::PUBSUB_NUMSUB(const std::string& strChannel, int& nResult)
+{
+    std::vector<std::string> vecChannel;
+    vecChannel.push_back(strChannel);
+    std::map<std::string, int> mapResult;
+    if (!PUBSUB_NUMSUB(vecChannel, mapResult))
+    {
+        return false;
+    }
+    auto itFind = mapResult.find(strChannel);
+    if (itFind == mapResult.end())
+    {
+        return false;
+    }
+    nResult = itFind->second;
+    return true;
+}
+
+bool CFlyRedisClient::PUBSUB_NUMSUB(const std::vector<std::string>& vecChannel, std::map<std::string, int>& mapResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("PUBSUB");
+    m_vecRedisCmdParamList.push_back("NUMSUB");
+    m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecChannel.begin(), vecChannel.end());
+    std::map<std::string, std::string> mapKVP;
+    if (!RunRedisCmdOnResponseKVP("", false, mapKVP, __FUNCTION__))
+    {
+        return false;
+    }
+    for (auto& kvp : mapKVP)
+    {
+        mapResult.insert(std::make_pair(kvp.first, atoi(kvp.second.c_str())));
+    }
+    return true;
+}
+
+bool CFlyRedisClient::PUBSUB_NUMPAT(int& nResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("PUBSUB");
+    m_vecRedisCmdParamList.push_back("NUMPAT");
+    return RunRedisCmdOnOneLineResponseInt("", false, nResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::SUBSCRIBE(const std::string& strChannel, FlyRedisSubscribeResponse& stResult)
+{
+    std::vector<std::string> vecChannel;
+    vecChannel.push_back(strChannel);
+    std::vector<FlyRedisSubscribeResponse> vecResult;
+    if (!SUBSCRIBE(vecChannel, vecResult))
+    {
+        return false;
+    }
+    if (vecResult.size() != 1)
+    {
+        return false;
+    }
+    stResult = vecResult[0];
+    return true;
+}
+
+bool CFlyRedisClient::SUBSCRIBE(const std::vector<std::string>& vecChannel, std::vector<FlyRedisSubscribeResponse>& vecResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("SUBSCRIBE");
+    m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecChannel.begin(), vecChannel.end());
+    return RunRedisCmdOnSubscribeCmd(vecResult, static_cast<int>(vecChannel.size()), __FUNCTION__);
+}
+
+bool CFlyRedisClient::PSUBSCRIBE(const std::string& strPattern, FlyRedisSubscribeResponse& stResult)
+{
+    std::vector<std::string> vecPattern;
+    vecPattern.push_back(strPattern);
+    std::vector<FlyRedisSubscribeResponse> vecResult;
+    if (!PSUBSCRIBE(vecPattern, vecResult))
+    {
+        return false;
+    }
+    if (vecResult.size() != 1)
+    {
+        return false;
+    }
+    stResult = vecResult[0];
+    return true;
+}
+
+bool CFlyRedisClient::PSUBSCRIBE(const std::vector<std::string>& vecPattern, std::vector<FlyRedisSubscribeResponse>& vecResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("PSUBSCRIBE");
+    m_vecRedisCmdParamList.insert(m_vecRedisCmdParamList.end(), vecPattern.begin(), vecPattern.end());
+    return RunRedisCmdOnSubscribeCmd(vecResult, static_cast<int>(vecPattern.size()), __FUNCTION__);
+}
+
+bool CFlyRedisClient::PollSubscribeMsg(std::vector<FlyRedisSubscribeResponse>& vecResult, int nBlockMS)
+{
+    if (nullptr == m_pCurRedisSession)
+    {
+        return false;
+    }
+    if (!m_pCurRedisSession->TryRecvRedisResponse(nBlockMS))
+    {
+        return false;
+    }
+    if (!BuildFlyRedisSubscribeResponse(m_pCurRedisSession->GetRedisResponseVector(), vecResult))
+    {
+        return false;
+    }
+    m_pCurRedisSession->ResetRedisResponse();
+    return true;
+}
+
+bool CFlyRedisClient::PollPSubscribeMsg(std::vector<FlyRedisPMessageResponse>& vecResult, int nBlockMS)
+{
+    if (nullptr == m_pCurRedisSession)
+    {
+        return false;
+    }
+    if (!m_pCurRedisSession->TryRecvRedisResponse(nBlockMS))
+    {
+        return false;
+    }
+    if (!BuildFlyRedisPMessageResponse(m_pCurRedisSession->GetRedisResponseVector(), vecResult))
+    {
+        return false;
+    }
+    m_pCurRedisSession->ResetRedisResponse();
+    return true;
+}
+
 bool CFlyRedisClient::SMEMBERS(const std::string& strKey, std::set<std::string>& setResult)
 {
     ClearRedisCmdCache();
@@ -3203,10 +3380,73 @@ bool CFlyRedisClient::RunRedisCmdOnScanCmd(const std::string& strKey, int& nResu
     return true;
 }
 
+bool CFlyRedisClient::RunRedisCmdOnSubscribeCmd(std::vector<FlyRedisSubscribeResponse>& vecResult, int nChannelCount, const char* pszCaller)
+{
+    if (!DeliverRedisCmd("", false, false, pszCaller))
+    {
+        return false;
+    }
+    if (nullptr == m_pCurRedisSession)
+    {
+        return false;
+    }
+    bool bResult = true;
+    while (vecResult.size() != nChannelCount)
+    {
+        if (!m_pCurRedisSession->TryRecvRedisResponse(10))
+        {
+            bResult = false;
+            break;
+        }
+        if (BuildFlyRedisSubscribeResponse(m_pCurRedisSession->GetRedisResponseVector(), vecResult))
+        {
+            m_pCurRedisSession->ResetRedisResponse();
+        }
+    }
+    return bResult;
+}
+
 void CFlyRedisClient::ClearRedisCmdCache()
 {
     m_vecRedisCmdParamList.clear();
     m_strRedisCmdRequest.clear();
+}
+
+bool CFlyRedisClient::BuildFlyRedisSubscribeResponse(const std::vector<std::string>& vecInput, std::vector<FlyRedisSubscribeResponse>& vecResult) const
+{
+    int nCount = static_cast<int>(vecInput.size());
+    if (nCount % 3 != 0)
+    {
+        return false;
+    }
+    for (int nIndex = 2; nIndex < nCount; nIndex += 3)
+    {
+        FlyRedisSubscribeResponse stResponse;
+        stResponse.strCmd = vecInput[nIndex - 2];
+        stResponse.strChannel = vecInput[nIndex - 1];
+        stResponse.strMsg = vecInput[nIndex];
+        vecResult.push_back(stResponse);
+    }
+    return true;
+}
+
+bool CFlyRedisClient::BuildFlyRedisPMessageResponse(const std::vector<std::string>& vecInput, std::vector<FlyRedisPMessageResponse>& vecResult) const
+{
+    int nCount = static_cast<int>(vecInput.size());
+    if (nCount % 4 != 0)
+    {
+        return false;
+    }
+    for (int nIndex = 3; nIndex < nCount; nIndex += 4)
+    {
+        FlyRedisPMessageResponse stResponse;
+        stResponse.strCmd = vecInput[nIndex - 3];
+        stResponse.strPattern = vecInput[nIndex - 2];
+        stResponse.strChannel = vecInput[nIndex - 1];
+        stResponse.strMsg = vecInput[nIndex];
+        vecResult.push_back(stResponse);
+    }
+    return true;
 }
 // End of RedisClient
 //////////////////////////////////////////////////////////////////////////

@@ -524,8 +524,25 @@ public:
     bool SREM(const std::string& strKey, const std::string& strValue, int& nResult);
     bool SUNION(const std::vector<std::string>& vecSrcKey, std::vector<std::string>& vecResult);
     bool SUNIONSTORE(const std::string& strDestKey, const std::vector<std::string>& vecSrcKey, int& nResult);
+
+    bool PUBLISH(const std::string& strChannel, const std::string& strMsg, int& nResult);
+    bool UNSUBSCRIBE(std::vector<std::string>& vecResult);
+    bool UNSUBSCRIBE(const std::string& strChannel, std::vector<std::string>& vecResult);
+    bool PUNSUBSCRIBE(const std::string& strPattern, std::vector<std::string>& vecResult);
+    bool PUBSUB_CHANNELS(const std::string& strPattern, std::vector<std::string>& vecResult);
+    bool PUBSUB_NUMSUB(const std::string& strChannel, int& nRtesult);
+    bool PUBSUB_NUMSUB(const std::vector<std::string>& vecChannel, std::map<std::string, int>& mapResult);
+    bool PUBSUB_NUMPAT(int& nResult);
+    bool SUBSCRIBE(const std::string& strChannel, FlyRedisSubscribeResponse& stResult);
+    bool SUBSCRIBE(const std::vector<std::string>& vecChannel, std::vector<FlyRedisSubscribeResponse>& vecResult);
+    bool PSUBSCRIBE(const std::string& strPattern, FlyRedisSubscribeResponse& tupleResult);
+    bool PSUBSCRIBE(const std::vector<std::string>& vecPattern, std::vector<FlyRedisSubscribeResponse>& vecResult);
     /// End of RedisCmd
     //////////////////////////////////////////////////////////////////////////
+
+    // You should call PollSubscribeMsg/PollPSubscribeMsg after run SUBSCRIBE/PSUBSCRIBE
+    bool PollSubscribeMsg(std::vector<FlyRedisSubscribeResponse>& vecResult, int nBlockMS);
+    bool PollPSubscribeMsg(std::vector<FlyRedisPMessageResponse>& vecResult, int nBlockMS);
 
 private:
     bool VerifyRedisSessionList();
@@ -565,8 +582,12 @@ private:
     bool RunRedisCmdOnResponseKVP(const std::string& strKey, bool bIsWrite, std::map<std::string, std::string>& mapResult, const char* pszCaller);
     bool RunRedisCmdOnResponsePairList(const std::string& strKey, bool bIsWrite, std::vector< std::pair<std::string, std::string> >& vecResult, const char* pszCaller);
     bool RunRedisCmdOnScanCmd(const std::string& strKey, int& nResultCursor, std::vector<std::string>& vecResult, const char* pszCaller);
+    bool RunRedisCmdOnSubscribeCmd(std::vector<FlyRedisSubscribeResponse>& vecResult, int nChannelCount, const char* pszCaller);
 
     void ClearRedisCmdCache();
+
+    bool BuildFlyRedisSubscribeResponse(const std::vector<std::string>& vecInput, std::vector<FlyRedisSubscribeResponse>& vecResult) const;
+    bool BuildFlyRedisPMessageResponse(const std::vector<std::string>& vecInput, std::vector<FlyRedisPMessageResponse>& vecResult) const;
 
 private:
     //////////////////////////////////////////////////////////////////////////
