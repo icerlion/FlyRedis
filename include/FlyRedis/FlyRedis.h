@@ -556,7 +556,7 @@ private:
     void PingEveryRedisNode(std::vector<CFlyRedisSession*>& vecDeadRedisSession);
 
     // Run redis cmd
-    bool DeliverRedisCmd(const std::string& strKey, bool bIsWrite, const char* pszCaller);
+    bool DeliverRedisCmd(const std::string& strKey, bool bIsWrite, bool bRunRecvCmd, const char* pszCaller);
     bool RunRedisCmdOnOneLineResponseInt(const std::string& strKey, bool bIsWrite, int& nResult, const char* pszCaller);
     bool RunRedisCmdOnOneLineResponseDouble(const std::string& strKey, bool bIsWrite, double& fResult, const char* pszCaller);
     bool RunRedisCmdOnOneLineResponseString(const std::string& strKey, bool bIsWrite, std::string& strResult, const char* pszCaller);

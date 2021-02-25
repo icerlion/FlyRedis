@@ -3022,7 +3022,7 @@ void CFlyRedisClient::PingEveryRedisNode(std::vector<CFlyRedisSession*>& vecDead
     }
 }
 
-bool CFlyRedisClient::DeliverRedisCmd(const std::string& strKey, bool bIsWrite, const char* pszCaller)
+bool CFlyRedisClient::DeliverRedisCmd(const std::string& strKey, bool bIsWrite, bool bRunRecvCmd, const char* pszCaller)
 {
     if (m_bHasBadRedisSession)
     {
@@ -3041,6 +3041,11 @@ bool CFlyRedisClient::DeliverRedisCmd(const std::string& strKey, bool bIsWrite, 
     }
     // Only write log for write cmd
     CFlyRedis::BuildRedisCmdRequest(m_pCurRedisSession->GetRedisAddr(), m_vecRedisCmdParamList, m_strRedisCmdRequest, bIsWrite);
+    if (!bRunRecvCmd)
+    {
+        m_pCurRedisSession->TrySendRedisRequest(m_strRedisCmdRequest);
+        return true;
+    }
     if (!m_pCurRedisSession->ProcRedisRequest(m_strRedisCmdRequest))
     {
         CFlyRedis::Logger(FlyRedisLogLevel::Error, "ProcRedisRequestFailed %s", pszCaller);
@@ -3074,7 +3079,7 @@ bool CFlyRedisClient::RunRedisCmdOnOneLineResponseDouble(const std::string& strK
 
 bool CFlyRedisClient::RunRedisCmdOnOneLineResponseString(const std::string& strKey, bool bIsWrite, std::string& strResult, const char* pszCaller)
 {
-    if (!DeliverRedisCmd(strKey, bIsWrite, pszCaller))
+    if (!DeliverRedisCmd(strKey, bIsWrite, true, pszCaller))
     {
         return false;
     }
@@ -3088,7 +3093,7 @@ bool CFlyRedisClient::RunRedisCmdOnOneLineResponseString(const std::string& strK
 
 bool CFlyRedisClient::RunRedisCmdOnOneLineResponseVector(const std::string& strKey, bool bIsWrite, std::vector<std::string>& vecResult, const char* pszCaller)
 {
-    if (!DeliverRedisCmd(strKey, bIsWrite, pszCaller))
+    if (!DeliverRedisCmd(strKey, bIsWrite, true, pszCaller))
     {
         return false;
     }
@@ -3102,7 +3107,7 @@ bool CFlyRedisClient::RunRedisCmdOnOneLineResponseVector(const std::string& strK
 
 bool CFlyRedisClient::RunRedisCmdOnOneLineResponseSet(const std::string& strKey, bool bIsWrite, std::set<std::string>& setResult, const char* pszCaller)
 {
-    if (!DeliverRedisCmd(strKey, bIsWrite, pszCaller))
+    if (!DeliverRedisCmd(strKey, bIsWrite, true, pszCaller))
     {
         return false;
     }
@@ -3116,7 +3121,7 @@ bool CFlyRedisClient::RunRedisCmdOnOneLineResponseSet(const std::string& strKey,
 
 bool CFlyRedisClient::RunRedisCmdOnResponseKVP(const std::string& strKey, bool bIsWrite, std::map<std::string, std::string>& mapResult, const char* pszCaller)
 {
-    if (!DeliverRedisCmd(strKey, bIsWrite, pszCaller))
+    if (!DeliverRedisCmd(strKey, bIsWrite, true, pszCaller))
     {
         return false;
     }
@@ -3155,7 +3160,7 @@ bool CFlyRedisClient::RunRedisCmdOnResponseKVP(const std::string& strKey, bool b
 
 bool CFlyRedisClient::RunRedisCmdOnResponsePairList(const std::string& strKey, bool bIsWrite, std::vector< std::pair<std::string, std::string> >& vecResult, const char* pszCaller)
 {
-    if (!DeliverRedisCmd(strKey, bIsWrite, pszCaller))
+    if (!DeliverRedisCmd(strKey, bIsWrite, true, pszCaller))
     {
         return false;
     }
@@ -3179,7 +3184,7 @@ bool CFlyRedisClient::RunRedisCmdOnResponsePairList(const std::string& strKey, b
 
 bool CFlyRedisClient::RunRedisCmdOnScanCmd(const std::string& strKey, int& nResultCursor, std::vector<std::string>& vecResult, const char* pszCaller)
 {
-    if (!DeliverRedisCmd(strKey, false, pszCaller))
+    if (!DeliverRedisCmd(strKey, false, true, pszCaller))
     {
         return false;
     }
