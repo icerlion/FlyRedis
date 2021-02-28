@@ -2,8 +2,9 @@
 C++ Redis Client, base on Boost.asio.
 This project depends on *boost_1_72_0*, and The RedisServer is *5.0+*. At the same time, you can try it with other version of boost and redis server.
 
+## 2021-03-01: Support PUB/SUB CMD!
 ## 2020-11-18: Enable SetReadTimeoutSeconds!
-## 2020-07-09: TLS IS READY NOW! 
+## 2020-07-09: TLS IS READY NOW!
 ## 2020-06-20: RESP3 IS READY NOW! 
 
 
@@ -63,4 +64,42 @@ pFlyRedisClient->SetTLSContext("redis.crt", "redis.key", "ca.crt");
 pFlyRedisClient->SetRedisConfig(CONFIG_REDIS_ADDR, CONFIG_REDIS_PASSWORD);
 pFlyRedisClient->Open();
 pFlyRedisClient->HELLO(CONFIG_RESP_VER);
+```
+
+### How To Use Publish/Subscribe Cmd?
+
+After call SUBSCRIBE/PSUBSCRIBE, you should call PollSubscribeMsg/PollPSubscribeMsg
+```
+// Subscribe code sample
+CFlyRedisClient* pFlyRedisClient = new CFlyRedisClient();
+pFlyRedisClient->SetRedisConfig(CONFIG_REDIS_ADDR, CONFIG_REDIS_PASSWORD);
+pFlyRedisClient->Open();
+pFlyRedisClient->HELLO(CONFIG_RESP_VER);
+FlyRedisSubscribeResponse stFlyRedisSubscribeResponse;
+pFlyRedisClient->SUBSCRIBE("ch1", stFlyRedisSubscribeResponse);
+//pFlyRedisClient->PSUBSCRIBE("ch*", stFlyRedisSubscribeResponse);
+//std::vector<std::string> vecChannel;
+//vecChannel.push_back("c*");
+//vecChannel.push_back("ch*");
+//pFlyRedisClient->PSUBSCRIBE(vecChannel, vecFlyRedisSubscribeResponse);
+while (true)
+{
+	std::vector<FlyRedisSubscribeResponse> vecSubscribeRst;
+	pFlyRedisClient->PollSubscribeMsg(vecSubscribeRst, 10);
+	for (auto& stResponse : vecSubscribeRst)
+	{
+		printf("%zu,Subscribe,%s,%s,%s\n", time(nullptr), stResponse.strCmd.c_str(), stResponse.strChannel.c_str(), stResponse.strMsg.c_str());
+	}
+}
+```
+The following code show how to publish msg.
+```
+int nResult = 0;
+CFlyRedisClient* pFlyRedisClient = new CFlyRedisClient();
+pFlyRedisClient->SetRedisConfig(CONFIG_REDIS_ADDR, CONFIG_REDIS_PASSWORD);
+pFlyRedisClient->Open();
+pFlyRedisClient->HELLO(CONFIG_RESP_VER);
+std::string strChannel = "ch_name";
+std::string strMsg = "msg-content";
+hFlyRedisClient.PUBLISH(strChannel, strMsg, nResult);
 ```
