@@ -707,3 +707,26 @@ BOOST_AUTO_TEST_CASE(ACL_CMD)
 
     DESTROY_REDIS_CLIENT();
 }
+
+BOOST_AUTO_TEST_CASE(PUBSUB_CMD)
+{
+    CREATE_REDIS_CLIENT();
+    int nResult = 0;
+    BOOST_CHECK(pFlyRedisClient->PUBSUB_NUMPAT(nResult));
+    BOOST_CHECK(pFlyRedisClient->PUBSUB_NUMSUB("", nResult));
+    BOOST_CHECK(pFlyRedisClient->PUBSUB_NUMSUB("ch1", nResult));
+    std::map<std::string, int> mapKVP;
+    std::vector<std::string> vecChannel;
+    vecChannel.push_back("ch1");
+    vecChannel.push_back("ch2");
+    vecChannel.push_back("ch3");
+    BOOST_CHECK(pFlyRedisClient->PUBSUB_NUMSUB(vecChannel, mapKVP));
+    std::vector<std::string> vecResult;
+    BOOST_CHECK(pFlyRedisClient->PUBSUB_CHANNELS("", vecResult));
+    vecResult.clear();
+    BOOST_CHECK(pFlyRedisClient->PUBSUB_CHANNELS("ch1", vecResult));
+    vecResult.clear();
+    BOOST_CHECK(pFlyRedisClient->PUBSUB_CHANNELS("ch*", vecResult));
+    BOOST_CHECK(pFlyRedisClient->PUBLISH("ch1", "msg1", nResult));
+    DESTROY_REDIS_CLIENT();
+}
