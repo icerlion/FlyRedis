@@ -10,7 +10,7 @@ Include_Path=\
 	-I"../../include/" \
 	-I"../../boost_1_72_0/" \
 
-Output_File=./sample
+Output_File=./full_sample
 
 # PreCompile_Macro
 PreCompile_Macro=-DGCC_BUILD -DLINUX -D_DEBUG -D_LIB -DFLY_REDIS_ENABLE_TLS
@@ -34,16 +34,16 @@ entry: build
 # Creates the intermediate and output folders
 .PHONY: init
 init:
-	@echo "|===>RunTarget: init of sample"
+	@echo "|===>RunTarget: init of full_sample"
 	mkdir -p ./build
 	mkdir -p ./publish
 
-# build of sample
+# build of full_sample
 .PHONE: build
 build: init\
 	./build/FlyRedis.o \
 	./build/full_sample.o
-	@echo "|===>RunTarget: build of sample"
+	@echo "|===>RunTarget: build of full_sample"
 	g++ \
 	./build/FlyRedis.o \
 	./build/full_sample.o -lrt -ldl $(Library_Path) $(Link_Library_Static) $(Link_Library_Dynamic) -o $(Output_File)
@@ -64,6 +64,6 @@ build: init\
 # clean project output content
 .PHONY: clean
 clean: 
-	@echo "|===>RunTarget: clean of sample"
+	@echo "|===>RunTarget: clean of full_sample"
 	rm -rf ./build/*
 	rm -rf $(Output_File)

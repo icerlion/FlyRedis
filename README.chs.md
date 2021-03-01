@@ -1,34 +1,33 @@
 # FlyRedis
-C++ Redis Client, base on Boost.asio.
-This project depends on *boost_1_72_0*, and The RedisServer is *5.0+*. At the same time, you can try it with other version of boost and redis server.
+C++ Redis 客户端库，基于Boost.asio实现.
+本项目依赖于*boost_1_72_0*, RedisServer 支持 *5.0+* 以上的版本. 同事，你也可以尝试使用更高版本的boost或者RedisServer.
 
-[README in Chinese](https://github.com/icerlion/FlyRedis/blob/master/README.chs.md) 
+[README in English](https://github.com/icerlion/FlyRedis/blob/master/README.md) 
 
-## 2021-03-01: Support PUB/SUB CMD!
-## 2020-11-18: Enable SetReadTimeoutSeconds!
-## 2020-07-09: TLS IS READY NOW!
-## 2020-06-20: RESP3 IS READY NOW! 
+## 2021-03-01: 支持发布订阅指令!
+## 2020-11-18: 支持设置读取超时时间!
+## 2020-07-09: 支持TLS!
+## 2020-06-20: 支持RESP3! 
 
 
 [![Build Status](https://travis-ci.com/icerlion/FlyRedis.svg?branch=master)](https://travis-ci.com/icerlion/FlyRedis)
 [![license](https://img.shields.io/github/license/icerlion/FlyRedis.svg)](https://github.com/icerlion/FlyRedis/blob/master/LICENSE)
 
-
 ****
 
-### Dependency
+### 依赖
 boost.asio
 
-### How to use FlyRedis?
+### 如何使用FlyRedis?
 
-*Option1: Use FlyRedis As Statistic library*  
-*Option2: ___Recommand___ Include source code in your project, which is {fly_redis_home}/include/FlyRedis/*, there only two files, FlyRedis.h and FlyRedis.cpp  
+*Option1: 将 FlyRedis 作为一个静态库*  
+*Option2: ___推荐___ 将源码包含到你的项目中，该库仅仅有两个文件，目录为{fly_redis_home}/include/FlyRedis/*, FlyRedis.h and FlyRedis.cpp  
 
-### How to build FlyRedis as Library?
+### 如何构建静态库?
 Windows: {fly_redis_home}/FlyRedis.vcxproj    
 Linux: {fly_redis_home}/Makefile    
 
-### How to test FlyRedis?
+### 如何测试FlyRedis?
 Windows: 
 *{fly_redis_home}/example/full_sample/full_sample.vcxproj  
 *{fly_redis_home}/example/pubsub_sample/pubsub_sample.vcxproj  
@@ -36,16 +35,16 @@ Linux:
 *{fly_redis_home}/example/full_sample/Makefile  
 *{fly_redis_home}/example/pubsub_sample/Makefile  
 
-### Use FlyRedis In Your Code
+### 如何在你的代码中使用FlyRedis
 
 ```
-// If you want collect RedisLog, you can call CFlyRedis::SetLoggerHandler
+// 如果你想收集FlyuRedis的日志信息，可以为不同级别的日志设计对应的日志手机函数, 调用CFlyRedis::SetLoggerHandler即可
 CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Notice, YourLoggerFunction);
 CFlyRedisClient hFlyRedisClient;
 hFlyRedisClient.SetRedisConfig(strRedisAddr, strPassword);
-// If you want split read and write, you can call CFlyRedisClient::SetFlyRedisReadWriteType, 
-// then the read command will be sent to slave only.
-// The default mode was FlyRedisReadWriteType::ReadWriteOnMaster
+// 如果你想实现读写分离，需要调用CFlyRedisClient::SetFlyRedisReadWriteType, 
+// 然后，所有的读取指令都将会被发送到slave执行。
+// 确认模式是读写指令都会发送到主节点上执行
 hFlyRedisClient.SetFlyRedisReadWriteType(FlyRedisReadWriteType::ReadOnSlaveWriteOnMaster);
 hFlyRedisClient.Open();
 std::string strResult;
@@ -55,15 +54,15 @@ hFlyRedisClient.GET("key", strResult);
 hFlyRedisClient.DEL("key", nResult);
 ```
 
-### Redis Command Support
+### 对Redis指令的支持
 
-This project did not implement all Redis command, And I will add support in the further, at the same time, You can add implementation yourself, or you can send email to me, and I will add it in 7 days.
+本项目并没有支持全部的Redis指令，未来我将会添加对更多指令的支持。于此同时，你也可以调整代码以添加对相应指令的支持，或者你也可以给我提issue或者发送邮件，我将会尽快完成对新指令的支持。
 
-### How To Enable SSL/TSL in FlyRedis
+### 如何在FlyRedis中打开SSL/TSL
 
-First of all, you need to build redis with TLS open, ref： https://redis.io/topics/encryption 
-Then run redis-server witn TLS port opened.
-Add macro: FLY_REDIS_ENABLE_TLS to enable TLS in FlyRedis.
+首先，构建Redis的时候你需要打开TLS，参考：https://redis.io/topics/encryption
+然后，运行redis-server时打开TLS端口。
+最后，在编译是添加预编译宏：FLY_REDIS_ENABLE_TLS
 ```
 CFlyRedisClient* pFlyRedisClient = new CFlyRedisClient();
 pFlyRedisClient->SetTLSContext("redis.crt", "redis.key", "ca.crt");
@@ -72,11 +71,11 @@ pFlyRedisClient->Open();
 pFlyRedisClient->HELLO(CONFIG_RESP_VER);
 ```
 
-### How To Use Publish/Subscribe Cmd?
+### 如何使用Publish/Subscribe指令?
 
-After call SUBSCRIBE/PSUBSCRIBE, you should call PollSubscribeMsg/PollPSubscribeMsg
+在调用了 SUBSCRIBE/PSUBSCRIBE之后，你需要调用 PollSubscribeMsg/PollPSubscribeMsg来轮询订阅消息
 ```
-// Subscribe code sample
+// Subscribe代码样例
 CFlyRedisClient* pFlyRedisClient = new CFlyRedisClient();
 pFlyRedisClient->SetRedisConfig(CONFIG_REDIS_ADDR, CONFIG_REDIS_PASSWORD);
 pFlyRedisClient->Open();
@@ -98,7 +97,7 @@ while (true)
     }
 }
 ```
-The following code show how to publish msg.
+下面的代码演示如何发布消息.
 ```
 int nResult = 0;
 CFlyRedisClient* pFlyRedisClient = new CFlyRedisClient();
