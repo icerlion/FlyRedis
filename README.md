@@ -84,12 +84,12 @@ pFlyRedisClient->SUBSCRIBE("ch1", stFlyRedisSubscribeResponse);
 //pFlyRedisClient->PSUBSCRIBE(vecChannel, vecFlyRedisSubscribeResponse);
 while (true)
 {
-	std::vector<FlyRedisSubscribeResponse> vecSubscribeRst;
-	pFlyRedisClient->PollSubscribeMsg(vecSubscribeRst, 10);
-	for (auto& stResponse : vecSubscribeRst)
-	{
-		printf("%zu,Subscribe,%s,%s,%s\n", time(nullptr), stResponse.strCmd.c_str(), stResponse.strChannel.c_str(), stResponse.strMsg.c_str());
-	}
+    std::vector<FlyRedisSubscribeResponse> vecSubscribeRst;
+    pFlyRedisClient->PollSubscribeMsg(vecSubscribeRst, 10);
+    for (auto& stResponse : vecSubscribeRst)
+    {
+        printf("%zu,Subscribe,%s,%s,%s\n", time(nullptr), stResponse.strCmd.c_str(), stResponse.strChannel.c_str(), stResponse.strMsg.c_str());
+    }
 }
 ```
 The following code show how to publish msg.
