@@ -109,12 +109,3 @@ std::string strMsg = "msg-content";
 hFlyRedisClient.PUBLISH(strChannel, strMsg, nResult);
 ```
 
-### 为什么写FlyRedis?
-其实[Redis.io](https://redis.io/clients#c-plus-plus) 官网上，C++版本的Redis客户端库已经有好多了，其中不乏很多优秀的库，包括基于Boost.asio的客户端库也有好多。但是当我在项目中是使用这些库的时候，现有的库可能会存在如下问题：
-* 无法跨操作系统使用。
-* 项目内代码依赖项较多。
-* 编程接口不友好。
-* 代码长时间没有更新维护。
-
-正好我们自身的项目也是基于Boost.asio完成的，研究了RESP协议之后，我决定自己写一个Redis客户端。最终完成了FlyRedis，仅仅包含两个文件。如果你的项目也依赖于boost.asio，你可以直接将这两个文件内嵌到你的代码中。
-FlyRedis将会追踪Redis.io的新特性，并会持续迭代更新。
