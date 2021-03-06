@@ -1,6 +1,6 @@
 # FlyRedis
 C++ Redis 客户端库，基于Boost.asio实现.
-本项目依赖于*boost_1_72_0*, RedisServer 支持 *5.0+* 以上的版本. 同事，你也可以尝试使用更高版本的boost或者RedisServer.
+本项目依赖于*boost_1_72_0*, RedisServer 支持 *5.0+* 以上的版本. 同时，你也可以尝试使用更高版本的boost或者RedisServer.
 
 [README in English](https://github.com/icerlion/FlyRedis/blob/master/README.md) 
 
