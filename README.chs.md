@@ -56,13 +56,13 @@ hFlyRedisClient.DEL("key", nResult);
 
 ### 对Redis指令的支持
 
-本项目并没有支持全部的Redis指令，未来我将会添加对更多指令的支持。于此同时，你也可以调整代码以添加对相应指令的支持，或者你也可以给我提issue或者发送邮件，我将会尽快完成对新指令的支持。
+本项目并没有支持全部的Redis指令，未来我将会添加对更多指令的支持。与此同时，你也可以调整代码以添加对相应指令的支持，或者你也可以给我提issue或者发送邮件，我将会尽快完成对新指令的支持。
 
 ### 如何在FlyRedis中打开SSL/TSL
 
 首先，构建Redis的时候你需要打开TLS，参考：https://redis.io/topics/encryption
 然后，运行redis-server时打开TLS端口。
-最后，在编译是添加预编译宏：FLY_REDIS_ENABLE_TLS
+最后，在编译时添加预编译宏：FLY_REDIS_ENABLE_TLS
 ```
 CFlyRedisClient* pFlyRedisClient = new CFlyRedisClient();
 pFlyRedisClient->SetTLSContext("redis.crt", "redis.key", "ca.crt");
