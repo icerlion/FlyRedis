@@ -243,6 +243,11 @@ public:
         return m_stRedisResponse.mapRedisResponse;
     }
 
+    inline const char* GetLastResponseErrorMsgCStr() const
+    {
+        return m_strLastResponseErrorMsg.c_str();
+    }
+
     //////////////////////////////////////////////////////////////////////////
     /// Begin of RedisCmd
     bool AUTH(const std::string& strPassword);
@@ -297,6 +302,7 @@ private:
     // Network data member
     CFlyRedisNetStream m_hNetStream;
     bool m_bRedisResponseError;
+    std::string m_strLastResponseErrorMsg;
     //////////////////////////////////////////////////////////////////////////
     std::string m_strRedisVersion;
     // Resp Version, default version was RESP2, if the server was greater than V6.0, it will be switched to RESP3
@@ -383,6 +389,8 @@ public:
     bool ACL_SETUSER(const std::string& strUserName, const std::string& strRules, std::string& strResult);
     bool ACL_USERS(std::vector<std::string>& vecResult);
     bool ACL_WHOAMI(std::string& strResult);
+
+    bool FLUSHALL(std::string& strResult);
 
     bool LASTSAVE(int& nUTCTime);
     bool TIME(int& nUnixTime, int& nMicroSeconds);
@@ -543,6 +551,16 @@ public:
     // You should call PollSubscribeMsg/PollPSubscribeMsg after run SUBSCRIBE/PSUBSCRIBE
     bool PollSubscribeMsg(std::vector<FlyRedisSubscribeResponse>& vecResult, int nBlockMS);
     bool PollPSubscribeMsg(std::vector<FlyRedisPMessageResponse>& vecResult, int nBlockMS);
+
+    // Get last response error msg
+    inline const char* GetLastResponseErrorMsgCStr() const
+    {
+        if (nullptr != m_pCurRedisSession)
+        {
+            return m_pCurRedisSession->GetLastResponseErrorMsgCStr();
+        }
+        return "";
+    }
 
 private:
     bool VerifyRedisSessionList();

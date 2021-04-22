@@ -254,6 +254,7 @@ CFlyRedisSession::CFlyRedisSession(boost::asio::io_context& boostIOContext, bool
     m_bIsMasterNode(false),
     m_hNetStream(boostIOContext, bUseTLSFlag, boostTLSContext),
     m_bRedisResponseError(false),
+    m_strLastResponseErrorMsg(),
     m_strRedisVersion(),
     m_nRESPVersion(2)
 {
@@ -265,6 +266,7 @@ CFlyRedisSession::CFlyRedisSession(boost::asio::io_context& boostIOContext)
     m_bIsMasterNode(false),
     m_hNetStream(boostIOContext),
     m_bRedisResponseError(false),
+    m_strLastResponseErrorMsg(),
     m_strRedisVersion(),
     m_nRESPVersion(2)
 {
@@ -650,6 +652,7 @@ bool CFlyRedisSession::ReadRedisResponseError()
     }
     CFlyRedis::Logger(FlyRedisLogLevel::Error, "RedisResponseError %s", m_stRedisResponse.strRedisResponse.c_str());
     m_bRedisResponseError = true;
+    m_strLastResponseErrorMsg = m_stRedisResponse.strRedisResponse;
     return true;
 }
 
@@ -1308,6 +1311,13 @@ bool CFlyRedisClient::ACL_WHOAMI(std::string& strResult)
     ClearRedisCmdCache();
     m_vecRedisCmdParamList.push_back("ACL");
     m_vecRedisCmdParamList.push_back("WHOAMI");
+    return RunRedisCmdOnOneLineResponseString("", false, strResult, __FUNCTION__);
+}
+
+bool CFlyRedisClient::FLUSHALL(std::string& strResult)
+{
+    ClearRedisCmdCache();
+    m_vecRedisCmdParamList.push_back("FLUSHALL");
     return RunRedisCmdOnOneLineResponseString("", false, strResult, __FUNCTION__);
 }
 
@@ -3391,7 +3401,7 @@ bool CFlyRedisClient::RunRedisCmdOnSubscribeCmd(std::vector<FlyRedisSubscribeRes
         return false;
     }
     bool bResult = true;
-    while (vecResult.size() != nChannelCount)
+    while (static_cast<int>(vecResult.size()) != nChannelCount)
     {
         if (!m_pCurRedisSession->TryRecvRedisResponse(10))
         {
