@@ -160,7 +160,7 @@ void ThreadTestPubSub(const std::string& strRedisAddr, const std::string& strPas
         hFlyRedisClient.PUBSUB_NUMSUB("ch1", nResult);
         std::map<std::string, int> mapKVP;
         std::vector<std::string> vecChannel;
-        vecChannel.push_back("ch1");
+        vecChannel.emplace_back("ch1");
         vecChannel.push_back("ch2");
         vecChannel.push_back("ch3");
         hFlyRedisClient.PUBSUB_NUMSUB(vecChannel, mapKVP);
