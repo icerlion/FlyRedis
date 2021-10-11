@@ -8,7 +8,7 @@ os:
     - linux
 
 before_script:
-    - wget -q -O - https://dl.bintray.com/boostorg/release/1.72.0/source/boost_1_72_0.tar.gz | tar -xz
+    - wget -q -O - https://boostorg.jfrog.io/artifactory/main/release/1.77.0/source/boost_1_77_0.tar.gz | tar -xz
 
 script:
     - make
