@@ -4,6 +4,7 @@ C++ Redis 客户端库，基于Boost.asio实现.
 
 [README in English](https://github.com/icerlion/FlyRedis/blob/master/README.md) 
 
+## 2022-08-28: 升级Boost!
 ## 2021-03-01: 支持发布订阅指令!
 ## 2020-11-18: 支持设置读取超时时间!
 ## 2020-07-09: 支持TLS!
