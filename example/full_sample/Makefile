@@ -8,7 +8,7 @@ Compiler_Flags=-O0 -Wall -ggdb -std=c++11
 # Include_Path
 Include_Path=\
 	-I"../../include/" \
-	-I"../../boost_1_72_0/" \
+	-I"../../boost_1_79_0/" \
 
 Output_File=./full_sample
 
@@ -20,7 +20,7 @@ Compiler_Flags=-O0 -Wall -ggdb -std=c++11
 
 # Library_Path
 Library_Path=\
-	-L"../../boost_1_72_0/stage/lib/"
+	-L"../../boost_1_79_0/stage/lib/"
 
 # Link_Library_Static
 Link_Library_Static=-Wl,-Bstatic -Wl,--start-group -lssl -lcrypto -lboost_thread -lboost_chrono -pthread -Wl,--end-group

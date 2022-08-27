@@ -95,6 +95,11 @@ public:
         return true;
     }
 
+    inline const std::string& GetLocalIP() const
+    {
+        return m_strLocalIP;
+    }
+
 private:
     bool ConnectAsTLS(boost::asio::ip::tcp::resolver::results_type& boostEndPoints);
 
@@ -107,16 +112,18 @@ private:
 private:
     // RedisAddress, format: host:port
     std::string m_strRedisAddress;
-    int m_nReadTimeoutSeconds;
+    int m_nReadTimeoutSeconds = 5;
     std::string m_strGlobalRecvBuff;
-    char m_caThisbuffRecv[512];
-    bool m_bInAsyncRead;
+    char m_caThisbuffRecv[512] = { 0 };
+    bool m_bInAsyncRead = false;
     boost::asio::io_context& m_boostIOContext;
 #ifdef FLY_REDIS_ENABLE_TLS
-    bool m_bUseTLSFlag;
+    bool m_bUseTLSFlag = false;
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket> m_boostTLSSocketStream;
 #endif // FLY_REDIS_ENABLE_TLS
     boost::asio::ip::tcp::socket m_boostTCPSocketStream;
+    //////////////////////////////////////////////////////////////////////////
+    std::string m_strLocalIP;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -139,12 +146,9 @@ enum class FlyRedisClusterDetectType : int
 struct FlyRedisResponse
 {
     FlyRedisResponse()
-        :strRedisResponse(),
-        vecRedisResponse(),
-        mapRedisResponse(),
-        setRedisResponse()
     {
     }
+
     inline void Reset()
     {
         strRedisResponse.clear();
@@ -248,6 +252,13 @@ public:
         return m_strLastResponseErrorMsg.c_str();
     }
 
+    std::string GetLastFullResponseString() const;
+
+    inline const std::string& GetLocalIP() const
+    {
+        return m_hNetStream.GetLocalIP();
+    }
+
     //////////////////////////////////////////////////////////////////////////
     /// Begin of RedisCmd
     bool AUTH(const std::string& strPassword);
@@ -295,18 +306,18 @@ private:
 
 private:
     // SlotRange
-    int m_nMinSlot;
-    int m_nMaxSlot;
-    bool m_bIsMasterNode;
+    int m_nMinSlot = 0;
+    int m_nMaxSlot = 0;
+    bool m_bIsMasterNode = false;
     //////////////////////////////////////////////////////////////////////////
     // Network data member
     CFlyRedisNetStream m_hNetStream;
-    bool m_bRedisResponseError;
+    bool m_bRedisResponseError = false;
     std::string m_strLastResponseErrorMsg;
     //////////////////////////////////////////////////////////////////////////
     std::string m_strRedisVersion;
     // Resp Version, default version was RESP2, if the server was greater than V6.0, it will be switched to RESP3
-    int m_nRESPVersion;
+    int m_nRESPVersion = 2;
     //////////////////////////////////////////////////////////////////////////
     // Last Response of this redis session
     FlyRedisResponse m_stRedisResponse;
@@ -339,7 +350,7 @@ public:
     ~CFlyRedisClient();
 
     // Set redis config, address as 127.0.0.1:6789
-    void SetRedisConfig(const std::string& strRedisAddress, const std::string& strPassword);
+    void SetRedisConfig(const std::string& strHost, int nPort, const std::string& strPassword);
     void SetReadTimeoutSeconds(int nSeconds);
     void SetRedisReadWriteType(FlyRedisReadWriteType nFlyRedisReadWriteType);
     void SetRedisClusterDetectType(FlyRedisClusterDetectType nFlyRedisClusterDetectType);
@@ -354,6 +365,9 @@ public:
         return m_bClusterFlag;
     }
 
+    // Get local ip
+    std::string GetLocalIP() const;
+
     // Open this client
     bool Open();
 
@@ -364,8 +378,8 @@ public:
     void FetchRedisNodeList(std::vector<std::string>& vecRedisNodeList) const;
     std::vector<std::string> FetchRedisNodeList() const;
 
-    // Chose current redis node
-    bool ChoseCurRedisNode(const std::string& strNodeAddr);
+    // Choose current redis node
+    bool ChooseCurRedisNode(const std::string& strNodeAddr);
 
     //////////////////////////////////////////////////////////////////////////
     /// Begin of RedisCmd
@@ -478,11 +492,15 @@ public:
     bool HVALS(const std::string& strKey, std::vector<std::string>& vecResult);
 
     bool ZADD(const std::string& strKey, double fScore, const std::string& strMember, int& nResult);
+    bool ZADD(const std::string& strKey, unsigned long long nScore, const std::string& strMember, int& nResult);
     bool ZCARD(const std::string& strKey, int& nResult);
     bool ZCOUNT(const std::string& strKey, const std::string& strMin, const std::string& strMax, int& nResult);
     bool ZINCRBY(const std::string& strKey, double fIncrement, const std::string& strMember, std::string& strResult);
     bool ZRANGE(const std::string& strKey, int nStart, int nStop, std::vector<std::string>& vecResult);
     bool ZRANGE_WITHSCORES(const std::string& strKey, int nStart, int nStop, std::vector<std::pair<std::string, double> >& vecResult);
+    bool ZRANGEBYSCORE(const std::string& strKey, int nMin, int nMax, std::vector<std::string>& vecResult);
+    bool ZRANGEBYSCORE(const std::string& strKey, const std::string& strMin, const std::string& strMax, std::vector<std::string>& vecResult);
+    bool ZREVRANGEBYSCORE(const std::string& strKey, int nMin, int nMax, std::vector<std::string>& vecResult);
     bool ZRANK(const std::string& strKey, const std::string& strMember, int& nResult);
     bool ZREM(const std::string& strKey, const std::string& strMember, int& nResult);
     bool ZREMRANGEBYSCORE(const std::string& strKey, double fFromScore, double fToScore, int& nResult);
@@ -562,6 +580,16 @@ public:
         return "";
     }
 
+    // Get last normal response string
+    inline std::string GetLastFullResponseString() const
+    {
+        if (nullptr != m_pCurRedisSession)
+        {
+            return m_pCurRedisSession->GetLastFullResponseString();
+        }
+        return "";
+    }
+
 private:
     bool VerifyRedisSessionList();
 
@@ -574,10 +602,10 @@ private:
         bool ParseNodeLine(const std::string& strNodeLine);
         std::string strNodeId;
         std::string strNodeIPPort;
-        bool bIsMaster; // true: master, false: slave
+        bool bIsMaster = false; // true: master, false: slave
         std::string strMasterNodeId; // Only for slave node
-        int nMinSlot;
-        int nMaxSlot;
+        int nMinSlot = 0;
+        int nMaxSlot = 0;
     };
     using RedisClusterNodesLine = struct RedisClusterNodesLine;
     bool ConnectToEveryRedisNode();
@@ -612,24 +640,24 @@ private:
     // SSl config file
     boost::asio::io_context m_boostIOContext;
 #ifdef FLY_REDIS_ENABLE_TLS
-    bool m_bUseTLSFlag;
-    boost::asio::ssl::context m_boostTLSContext;
+    bool m_bUseTLSFlag = false;
+    boost::asio::ssl::context m_boostTLSContext = boost::asio::ssl::context::sslv23_client;
 #endif // FLY_REDIS_ENABLE_TLS
     //////////////////////////////////////////////////////////////////////////
-    int m_nReadTimeoutSeconds;
+    int m_nReadTimeoutSeconds = 5;
     std::string m_strRedisAddress;
     std::set<std::string> m_setRedisAddressSeed;
     std::string m_strRedisPasswod;
-    bool m_bClusterFlag;
-    FlyRedisClusterDetectType m_nFlyRedisClusterDetectType;
-    FlyRedisReadWriteType m_nFlyRedisReadWriteType;
-    CFlyRedisSession* m_pCurRedisSession;
+    bool m_bClusterFlag = false;
+    FlyRedisClusterDetectType m_nFlyRedisClusterDetectType = FlyRedisClusterDetectType::AutoDetect;
+    FlyRedisReadWriteType m_nFlyRedisReadWriteType = FlyRedisReadWriteType::ReadWriteOnMaster;
+    CFlyRedisSession* m_pCurRedisSession = nullptr;
     // Key: redis address, ip:port
     // Value: redis session
     std::map<std::string, CFlyRedisSession*> m_mapRedisSession;
-    int m_nRedisNodeCount;
+    int m_nRedisNodeCount = 0;
     // Flag of need verify redis session list
-    bool m_bHasBadRedisSession;
+    bool m_bHasBadRedisSession = false;
     //////////////////////////////////////////////////////////////////////////
     // Redis Request 
     std::vector<std::string> m_vecRedisCmdParamList;
@@ -659,10 +687,10 @@ public:
     static void Logger(FlyRedisLogLevel nLevel, const char* pszMsgFormat, ...);
 
     // Calc the slot index
-    static bool IsMlutiKeyOnTheSameNode(const std::string& strKeyFirst, const std::string& strKeySecond);
-    static bool IsMlutiKeyOnTheSameNode(const std::vector<std::string>& vecKey);
-    static bool IsMlutiKeyOnTheSameNode(const std::vector<std::string>& vecKey, const std::string& strMoreKey);
-    static bool IsMlutiKeyOnTheSameNode(const std::map<std::string, std::string>& mapKeyValue);
+    static bool IsMultiKeyOnTheSameNode(const std::string& strKeyFirst, const std::string& strKeySecond);
+    static bool IsMultiKeyOnTheSameNode(const std::vector<std::string>& vecKey);
+    static bool IsMultiKeyOnTheSameNode(const std::vector<std::string>& vecKey, const std::string& strMoreKey);
+    static bool IsMultiKeyOnTheSameNode(const std::map<std::string, std::string>& mapKeyValue);
     static int KeyHashSlot(const std::string& strKey);
     static int KeyHashSlot(const char* pszKey, int nKeyLen);
 

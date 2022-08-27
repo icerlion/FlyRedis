@@ -28,9 +28,9 @@ void LoggerCommand(const char* pszMsg)
     Logger("Command", pszMsg);
 }
 
-bool InitFlyRedisClient(CFlyRedisClient& hFlyRedisClient, const std::string& strRedisAddr, const std::string& strPassword, bool bUseTLSFlag)
+bool InitFlyRedisClient(CFlyRedisClient& hFlyRedisClient, const std::string& strIP, int nPort, const std::string& strPassword, bool bUseTLSFlag)
 {
-    hFlyRedisClient.SetRedisConfig(strRedisAddr, strPassword);
+    hFlyRedisClient.SetRedisConfig(strIP, nPort, strPassword);
     hFlyRedisClient.SetRedisReadWriteType(FlyRedisReadWriteType::ReadWriteOnMaster);
     hFlyRedisClient.SetReadTimeoutSeconds(60);
 #ifdef FLY_REDIS_ENABLE_TLS
@@ -53,10 +53,10 @@ bool InitFlyRedisClient(CFlyRedisClient& hFlyRedisClient, const std::string& str
     return true;
 }
 
-void ThreadTestCommon(std::string strRedisAddr, std::string strPassword, bool bUseTLSFlag)
+void ThreadTestCommon(std::string strIP, int nPort, std::string strPassword, bool bUseTLSFlag)
 {
     CFlyRedisClient hFlyRedisClient;
-    if (!InitFlyRedisClient(hFlyRedisClient, strRedisAddr, strPassword, bUseTLSFlag))
+    if (!InitFlyRedisClient(hFlyRedisClient, strIP, nPort, strPassword, bUseTLSFlag))
     {
         return;
     }
@@ -143,10 +143,10 @@ void ThreadTestCommon(std::string strRedisAddr, std::string strPassword, bool bU
     LoggerNotice(("TimeCost: " + std::to_string(nElapsedTime)).c_str());
 }
 
-void ThreadTestPubSub(const std::string& strRedisAddr, const std::string& strPassword, bool bUseTLSFlag)
+void ThreadTestPubSub(const std::string& strIP, int nPort, const std::string& strPassword, bool bUseTLSFlag)
 {
     CFlyRedisClient hFlyRedisClient;
-    if (!InitFlyRedisClient(hFlyRedisClient, strRedisAddr, strPassword, bUseTLSFlag))
+    if (!InitFlyRedisClient(hFlyRedisClient, strIP, nPort, strPassword, bUseTLSFlag))
     {
         return;
     }
@@ -154,7 +154,7 @@ void ThreadTestPubSub(const std::string& strRedisAddr, const std::string& strPas
     std::vector<std::string> vecRedisNodeList = hFlyRedisClient.FetchRedisNodeList();
     for (auto& strNode : vecRedisNodeList)
     {
-        hFlyRedisClient.ChoseCurRedisNode(strNode);
+        hFlyRedisClient.ChooseCurRedisNode(strNode);
         hFlyRedisClient.PUBSUB_NUMPAT(nResult);
         hFlyRedisClient.PUBSUB_NUMSUB("", nResult);
         hFlyRedisClient.PUBSUB_NUMSUB("ch1", nResult);
@@ -180,7 +180,7 @@ void ThreadTestPubSub(const std::string& strRedisAddr, const std::string& strPas
             hFlyRedisClient.PUBLISH(strChannel, strMsg, nResult);
             for (auto& strNode : vecRedisNodeList)
             {
-                hFlyRedisClient.ChoseCurRedisNode(strNode);
+                hFlyRedisClient.ChooseCurRedisNode(strNode);
                 hFlyRedisClient.PUBSUB_NUMPAT(nResult);
             }
         }
@@ -194,7 +194,7 @@ void ThreadTestPubSub(const std::string& strRedisAddr, const std::string& strPas
         vecChannel.push_back(strChannel2);
         for (auto& strNode : vecRedisNodeList)
         {
-            hFlyRedisClient.ChoseCurRedisNode(strNode);
+            hFlyRedisClient.ChooseCurRedisNode(strNode);
             std::vector<FlyRedisSubscribeResponse> vecResult;
             hFlyRedisClient.SUBSCRIBE(vecChannel, vecResult);
             time_t nCurTime = time(nullptr);
@@ -236,10 +236,10 @@ void ThreadTestPubSub(const std::string& strRedisAddr, const std::string& strPas
     return;
 }
 
-void ThreadPublish(const std::string& strRedisAddr, const std::string& strPassword, bool bUseTLSFlag)
+void ThreadPublish(const std::string& strIP, int nPort, const std::string& strPassword, bool bUseTLSFlag)
 {
     CFlyRedisClient hFlyRedisClient;
-    if (!InitFlyRedisClient(hFlyRedisClient, strRedisAddr, strPassword, bUseTLSFlag))
+    if (!InitFlyRedisClient(hFlyRedisClient, strIP, nPort, strPassword, bUseTLSFlag))
     {
         return;
     }
@@ -257,10 +257,10 @@ void ThreadPublish(const std::string& strRedisAddr, const std::string& strPasswo
     }
 }
 
-void ThreadSubscribe(const std::string& strRedisAddr, const std::string& strPassword, bool bUseTLSFlag)
+void ThreadSubscribe(const std::string& strIP, int nPort, const std::string& strPassword, bool bUseTLSFlag)
 {
     CFlyRedisClient hFlyRedisClient;
-    if (!InitFlyRedisClient(hFlyRedisClient, strRedisAddr, strPassword, bUseTLSFlag))
+    if (!InitFlyRedisClient(hFlyRedisClient, strIP, nPort, strPassword, bUseTLSFlag))
     {
         return;
     }
@@ -285,10 +285,10 @@ void ThreadSubscribe(const std::string& strRedisAddr, const std::string& strPass
     }
 }
 
-void ThreadPSubscribe(const std::string& strRedisAddr, const std::string& strPassword, bool bUseTLSFlag)
+void ThreadPSubscribe(const std::string& strIP, int nPort, const std::string& strPassword, bool bUseTLSFlag)
 {
     CFlyRedisClient hFlyRedisClient;
-    if (!InitFlyRedisClient(hFlyRedisClient, strRedisAddr, strPassword, bUseTLSFlag))
+    if (!InitFlyRedisClient(hFlyRedisClient, strIP, nPort, strPassword, bUseTLSFlag))
     {
         return;
     }
@@ -316,19 +316,20 @@ void ThreadPSubscribe(const std::string& strRedisAddr, const std::string& strPas
 
 int main(int argc, char* argv[])
 {
-    // ./sample 192.168.1.10:1000 123456 tls 1
+    // ./sample 192.168.1.10 1000 123456 tls 1
     // Start Redis server enable tls
     // redis-server --tls-port 2000 --port 1000 --tls-cert-file ./tests/tls/redis.crt --tls-key-file ./tests/tls/redis.key --tls-ca-cert-file ./tests/tls/ca.crt --bind 192.168.1.10 --requirepass 123455
-    if (argc != 5)
+    if (argc != 6)
     {
         // Param: 127.0.0.1:8000 123456 tls 1
         printf("sample redis_ip:redis_port redis_password enable_tls thread_count\n");
         return -1;
     }
-    std::string strRedisAddr = argv[1];
-    std::string strPassword = argv[2];
-    bool bUseTLSFlag = (0 == strcmp("tls", argv[3]));
-    int nThreadCount = atoi(argv[4]);
+    std::string strIP = argv[1];
+    int nPort = atoi(argv[2]);
+    std::string strPassword = argv[3];
+    bool bUseTLSFlag = (0 == strcmp("tls", argv[4]));
+    int nThreadCount = atoi(argv[5]);
     // Config FlyRedis, but it's not not necessary
     CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Debug, LoggerDebug);
     CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Notice, LoggerNotice);
@@ -337,19 +338,19 @@ int main(int argc, char* argv[])
     CFlyRedis::SetLoggerHandler(FlyRedisLogLevel::Command, LoggerCommand);
     //////////////////////////////////////////////////////////////////////////
     boost::thread_group tgPubSub;
-    tgPubSub.create_thread(boost::bind(ThreadPublish, strRedisAddr, strPassword, bUseTLSFlag));
-    tgPubSub.create_thread(boost::bind(ThreadSubscribe, strRedisAddr, strPassword, bUseTLSFlag));
-    tgPubSub.create_thread(boost::bind(ThreadPSubscribe, strRedisAddr, strPassword, bUseTLSFlag));
+    tgPubSub.create_thread(boost::bind(ThreadPublish, strIP, nPort, strPassword, bUseTLSFlag));
+    tgPubSub.create_thread(boost::bind(ThreadSubscribe, strIP, nPort, strPassword, bUseTLSFlag));
+    tgPubSub.create_thread(boost::bind(ThreadPSubscribe, strIP, nPort, strPassword, bUseTLSFlag));
     tgPubSub.join_all();
     //////////////////////////////////////////////////////////////////////////
-    ThreadTestPubSub(strRedisAddr, strPassword, bUseTLSFlag);
-    ThreadTestCommon(strRedisAddr, strPassword, bUseTLSFlag);
+    ThreadTestPubSub(strIP, nPort, strPassword, bUseTLSFlag);
+    ThreadTestCommon(strIP, nPort, strPassword, bUseTLSFlag);
     //////////////////////////////////////////////////////////////////////////
     boost::thread_group tgTestFun;
     for (int i = 0; i < nThreadCount; ++i)
     {
-        tgTestFun.create_thread(boost::bind(ThreadTestCommon, strRedisAddr, strPassword, bUseTLSFlag));
-        tgTestFun.create_thread(boost::bind(ThreadTestPubSub, strRedisAddr, strPassword, bUseTLSFlag));
+        tgTestFun.create_thread(boost::bind(ThreadTestCommon, strIP, nPort, strPassword, bUseTLSFlag));
+        tgTestFun.create_thread(boost::bind(ThreadTestPubSub, strIP, nPort, strPassword, bUseTLSFlag));
     }
     tgTestFun.join_all();
     LoggerNotice("Done Test");
