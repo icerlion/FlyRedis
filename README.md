@@ -4,6 +4,7 @@ This project depends on *boost_1_72_0*, and The RedisServer is *5.0+*. At the sa
 
 [README in Chinese](https://github.com/icerlion/FlyRedis/blob/master/README.chs.md) 
 
+## 2022-08-28: Upgrade Boost!
 ## 2021-03-01: Support PUB/SUB CMD!
 ## 2020-11-18: Enable SetReadTimeoutSeconds!
 ## 2020-07-09: TLS IS READY NOW!
